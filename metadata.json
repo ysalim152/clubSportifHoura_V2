@@ -1,0 +1,6 @@
+{
+  "name": "Hourasports",
+  "description": "Application SaaS de gestion d'association sportive inspirée de SportEasy, AssoConnect et MonClub.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

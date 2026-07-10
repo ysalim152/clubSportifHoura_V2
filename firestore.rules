@@ -1,0 +1,182 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn();
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Helper to check if user is a member of the club
+    function isMember(clubId) {
+      return isVerified() && exists(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid));
+    }
+
+    function getMember(clubId) {
+      return get(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid)).data;
+    }
+
+    function isClubAdmin(clubId) {
+      return isMember(clubId) && getMember(clubId).role == 'admin';
+    }
+
+    function isClubCoach(clubId) {
+      return isMember(clubId) && (getMember(clubId).role == 'coach' || getMember(clubId).role == 'admin');
+    }
+    
+    // Protect Users (MFA settings etc.)
+    match /users/{userId} {
+      allow read, write: if isVerified() && (
+        userId == request.auth.uid ||
+        request.auth.token.email == 'mass26.sm15@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperUser == true)
+      );
+    }
+    
+    // Protect Clubs
+    match /clubs/{clubId} {
+      allow create: if isVerified() && isValidId(clubId) &&
+                     request.resource.data.createdBy == request.auth.uid &&
+                     request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
+                     request.resource.data.sport is string && request.resource.data.sport.size() > 0 && request.resource.data.sport.size() <= 50;
+
+      allow read: if isVerified() && (resource.data.createdBy == request.auth.uid || isMember(clubId));
+
+      allow update: if isVerified() && isClubAdmin(clubId) &&
+                     request.resource.data.createdBy == resource.data.createdBy &&
+                     request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
+                     request.resource.data.sport is string && request.resource.data.sport.size() > 0 && request.resource.data.sport.size() <= 50;
+
+      allow delete: if isVerified() && resource.data.createdBy == request.auth.uid;
+
+      // Sub-collection: Members
+      match /members/{memberId} {
+        allow read: if isVerified() && (
+          isMember(clubId) || 
+          memberId == request.auth.uid || 
+          (exists(/databases/$(database)/documents/clubs/$(clubId)) && get(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid)
+        );
+        
+        // Club creator, club admin, or a new user registering themselves can create a member document.
+        allow create: if isVerified() && isValidId(memberId) &&
+                       (
+                         (exists(/databases/$(database)/documents/clubs/$(clubId)) && get(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid) ||
+                         (existsAfter(/databases/$(database)/documents/clubs/$(clubId)) && getAfter(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid) ||
+                         isClubAdmin(clubId) ||
+                         (memberId == request.auth.uid && request.resource.data.role == 'admin') // Allow first creator to sign up as admin
+                       ) &&
+                       request.resource.data.clubId == clubId &&
+                       request.resource.data.firstName is string && request.resource.data.firstName.size() <= 50 &&
+                       request.resource.data.lastName is string && request.resource.data.lastName.size() <= 50 &&
+                       request.resource.data.role in ['player', 'coach', 'admin'] &&
+                       request.resource.data.email is string && request.resource.data.email.size() <= 100;
+
+        allow update: if isVerified() && isValidId(memberId) &&
+                       (
+                         isClubAdmin(clubId) ||
+                         (memberId == request.auth.uid && request.resource.data.role == resource.data.role && request.resource.data.clubId == resource.data.clubId)
+                       ) &&
+                       request.resource.data.firstName is string && request.resource.data.firstName.size() <= 50 &&
+                       request.resource.data.lastName is string && request.resource.data.lastName.size() <= 50 &&
+                       request.resource.data.email is string && request.resource.data.email.size() <= 100;
+
+        allow delete: if isVerified() && (isClubAdmin(clubId) || (exists(/databases/$(database)/documents/clubs/$(clubId)) && get(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid));
+      }
+
+      // Sub-collection: Teams
+      match /teams/{teamId} {
+        allow read: if isVerified() && isMember(clubId);
+        allow create: if isVerified() && isValidId(teamId) && isClubAdmin(clubId) &&
+                       request.resource.data.clubId == clubId &&
+                       request.resource.data.name is string && request.resource.data.name.size() <= 100 &&
+                       request.resource.data.category is string && request.resource.data.category.size() <= 50;
+
+        allow update: if isVerified() && isValidId(teamId) && isClubAdmin(clubId) &&
+                       request.resource.data.clubId == resource.data.clubId &&
+                       request.resource.data.name is string && request.resource.data.name.size() <= 100 &&
+                       request.resource.data.category is string && request.resource.data.category.size() <= 50;
+
+        allow delete: if isVerified() && isClubAdmin(clubId);
+      }
+
+      // Sub-collection: Events
+      match /events/{eventId} {
+        allow read: if isVerified() && isMember(clubId);
+        allow create: if isVerified() && isValidId(eventId) && isClubCoach(clubId) &&
+                       request.resource.data.clubId == clubId &&
+                       request.resource.data.title is string && request.resource.data.title.size() <= 100 &&
+                       request.resource.data.type in ['training', 'match', 'tournament', 'other'] &&
+                       request.resource.data.start is string &&
+                       request.resource.data.end is string;
+
+        allow update: if isVerified() && isValidId(eventId) && isClubCoach(clubId) &&
+                       request.resource.data.clubId == resource.data.clubId &&
+                       request.resource.data.title is string && request.resource.data.title.size() <= 100 &&
+                       request.resource.data.type in ['training', 'match', 'tournament', 'other'] &&
+                       request.resource.data.start is string &&
+                       request.resource.data.end is string;
+
+        allow delete: if isVerified() && isClubCoach(clubId);
+
+        // Sub-collection: Convocations (event attendance)
+        match /convocations/{convocationId} {
+          allow read: if isVerified() && isMember(clubId);
+          
+          allow create, update: if isVerified() && isValidId(convocationId) &&
+                                 (
+                                   isClubCoach(clubId) ||
+                                   (request.resource.data.memberId == request.auth.uid && request.resource.data.eventId == eventId)
+                                 ) &&
+                                 request.resource.data.status in ['pending', 'confirmed', 'declined', 'absent', 'present'];
+
+          allow delete: if isVerified() && isClubCoach(clubId);
+        }
+      }
+
+      // Sub-collection: Payments
+      match /payments/{paymentId} {
+        allow read: if isVerified() && (isClubAdmin(clubId) || resource.data.memberId == request.auth.uid);
+        
+        allow create: if isVerified() && isValidId(paymentId) && isClubAdmin(clubId) &&
+                       request.resource.data.clubId == clubId &&
+                       request.resource.data.memberId is string &&
+                       request.resource.data.amount is number &&
+                       request.resource.data.status in ['paid', 'pending', 'failed'];
+
+        allow update: if isVerified() && isValidId(paymentId) && isClubAdmin(clubId) &&
+                       request.resource.data.clubId == resource.data.clubId &&
+                       request.resource.data.memberId == resource.data.memberId &&
+                       request.resource.data.amount is number &&
+                       request.resource.data.status in ['paid', 'pending', 'failed'];
+
+        allow delete: if isVerified() && isClubAdmin(clubId);
+      }
+
+      // Sub-collection: Messages
+      match /messages/{messageId} {
+        allow read: if isVerified() && isMember(clubId);
+        
+        allow create: if isVerified() && isValidId(messageId) && isMember(clubId) &&
+                       request.resource.data.clubId == clubId &&
+                       request.resource.data.senderId == request.auth.uid &&
+                       request.resource.data.content is string && request.resource.data.content.size() <= 1000;
+
+        allow update, delete: if isVerified() && (resource.data.senderId == request.auth.uid || isClubAdmin(clubId));
+      }
+    }
+  }
+}

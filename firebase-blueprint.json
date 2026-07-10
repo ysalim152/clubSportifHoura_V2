@@ -1,0 +1,151 @@
+{
+  "entities": {
+    "Club": {
+      "title": "Club",
+      "description": "Represents a sports club or association.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sport": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "address": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "sport", "createdBy", "createdAt"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "A member (player, coach, or admin) belonging to a sports club.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "role": { "type": "string", "enum": ["player", "coach", "admin"] },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "licenseNumber": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "membershipPaid": { "type": "boolean" },
+        "membershipAmount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clubId", "firstName", "lastName", "role", "email", "createdAt"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "A sports team belonging to a club.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "coachId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clubId", "name", "category", "createdAt"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "A training session, match, tournament, or other club activity.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "teamId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["training", "match", "tournament", "other"] },
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" },
+        "location": { "type": "string" },
+        "opponent": { "type": "string" },
+        "convocationStatus": { "type": "string", "enum": ["draft", "sent", "closed"] },
+        "scoreHome": { "type": "number" },
+        "scoreAway": { "type": "number" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clubId", "teamId", "title", "type", "start", "end", "createdAt"]
+    },
+    "Convocation": {
+      "title": "Convocation",
+      "description": "Represents attendance or summons of a member to an event.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "declined", "absent", "present"] },
+        "role": { "type": "string", "enum": ["player", "substitute"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "eventId", "memberId", "status", "updatedAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "A membership fee, equipment payment, or other transaction.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["paid", "pending", "failed"] },
+        "paymentMethod": { "type": "string", "enum": ["card", "cash", "check", "bank_transfer"] },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clubId", "memberId", "amount", "status", "date"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "An announcement or chat message shared with a club or team.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "teamId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "string", "enum": ["announcement", "message"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clubId", "senderId", "senderName", "content", "type", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/clubs/{clubId}": {
+      "schema": "Club",
+      "description": "Sports club records."
+    },
+    "/clubs/{clubId}/members/{memberId}": {
+      "schema": "Member",
+      "description": "Club members, including roles like coach and player."
+    },
+    "/clubs/{clubId}/teams/{teamId}": {
+      "schema": "Team",
+      "description": "Teams created inside the club."
+    },
+    "/clubs/{clubId}/events/{eventId}": {
+      "schema": "Event",
+      "description": "Events scheduled for teams within the club."
+    },
+    "/clubs/{clubId}/events/{eventId}/convocations/{convocationId}": {
+      "schema": "Convocation",
+      "description": "Player summons and attendance statuses for events."
+    },
+    "/clubs/{clubId}/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Financial dues and payments of club members."
+    },
+    "/clubs/{clubId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Communications, updates, and announcements shared by admins/coaches."
+    }
+  }
+}
