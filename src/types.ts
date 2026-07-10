@@ -24,7 +24,11 @@ export interface Member {
   photoUrl?: string;
   equipmentSize?: string; // e.g. XS, S, M, L, XL, XXL
   medicalCertStatus?: 'valid' | 'renew' | 'missing';
+  medicalCertFile?: { name: string; size: number; base64: string; uploadedAt: string };
   registrationFormStatus?: 'valid' | 'renew' | 'missing';
+  registrationFormFile?: { name: string; size: number; base64: string; uploadedAt: string };
+  parentalAuthStatus?: 'valid' | 'renew' | 'missing';
+  parentalAuthFile?: { name: string; size: number; base64: string; uploadedAt: string };
 }
 
 export interface Team {

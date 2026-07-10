@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, UserPlus, Filter, Search, Plus, Trash2, Edit2, ShieldAlert, Check, 
   X, Briefcase, Mail, Phone, Calendar, Clipboard, ShieldCheck, Trophy,
-  Camera, User, FileText, Award, AlertTriangle, CheckCircle
+  Camera, User, FileText, Award, AlertTriangle, CheckCircle, Download, UploadCloud,
+  FileUp, FileDown, Paperclip, Eye
 } from 'lucide-react';
 import { collection, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, sanitizeData } from '../firebase';
 import { Club, Member, Team } from '../types';
+import { generateRegistrationFormPDF, generateParentalAuthPDF } from '../utils/pdfGenerator';
 
 interface MemberManagerProps {
   club: Club;
@@ -156,7 +158,11 @@ export default function MemberManager({
         photoUrl: photoUrl.trim() || undefined,
         equipmentSize: equipmentSize || undefined,
         medicalCertStatus: medicalCertStatus || 'missing',
-        registrationFormStatus: registrationFormStatus || 'missing'
+        registrationFormStatus: registrationFormStatus || 'missing',
+        parentalAuthStatus: editingMember ? (editingMember.parentalAuthStatus || 'missing') : 'missing',
+        medicalCertFile: editingMember ? editingMember.medicalCertFile : undefined,
+        registrationFormFile: editingMember ? editingMember.registrationFormFile : undefined,
+        parentalAuthFile: editingMember ? editingMember.parentalAuthFile : undefined
       };
 
       await setDoc(doc(db, 'clubs', club.id, 'members', memberId), sanitizeData(memberData)).catch(err => {
@@ -205,6 +211,77 @@ export default function MemberManager({
       setError("Erreur de mise à jour de la fiche : " + err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDocumentUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    docType: 'medicalCert' | 'registrationForm' | 'parentalAuth'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Strict size constraint: max 400KB to fit easily into Firestore 1MB limit
+    if (file.size > 400 * 1024) {
+      alert("Le fichier est trop volumineux (max 400 Ko). Veuillez compresser votre document (image ou PDF) avant de le téléverser.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      if (selectedMemberForDetail) {
+        const fileMeta = {
+          name: file.name,
+          size: file.size,
+          base64: base64String,
+          uploadedAt: new Date().toISOString()
+        };
+
+        const statusField = `${docType}Status` as keyof Member;
+        const fileField = `${docType}File` as keyof Member;
+
+        setSelectedMemberForDetail({
+          ...selectedMemberForDetail,
+          [statusField]: 'valid',
+          [fileField]: fileMeta
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDownloadUploadedFile = (fileMeta: { name: string; base64: string }) => {
+    try {
+      const link = document.createElement('a');
+      link.href = fileMeta.base64;
+      link.download = fileMeta.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Erreur de téléchargement du document : ", err);
+    }
+  };
+
+  const handleDeleteUploadedFile = (docType: 'medicalCert' | 'registrationForm' | 'parentalAuth') => {
+    if (selectedMemberForDetail) {
+      const statusField = `${docType}Status` as keyof Member;
+      const fileField = `${docType}File` as keyof Member;
+
+      const updated = { ...selectedMemberForDetail };
+      updated[statusField] = 'missing' as any;
+      
+      // Remove file metadata safely
+      if (fileField === 'medicalCertFile') {
+        updated.medicalCertFile = undefined;
+      } else if (fileField === 'registrationFormFile') {
+        updated.registrationFormFile = undefined;
+      } else if (fileField === 'parentalAuthFile') {
+        updated.parentalAuthFile = undefined;
+      }
+
+      setSelectedMemberForDetail(updated);
     }
   };
 
@@ -741,6 +818,17 @@ export default function MemberManager({
                                  m.registrationFormStatus === 'renew' ? 'À renouveler' : 'Absente'}
                               </span>
                             </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase w-11 shrink-0">Autori. P :</span>
+                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                m.parentalAuthStatus === 'valid' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                                m.parentalAuthStatus === 'renew' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                'bg-rose-50 text-rose-700 border-rose-100'
+                              }`}>
+                                {m.parentalAuthStatus === 'valid' ? 'Valide' :
+                                 m.parentalAuthStatus === 'renew' ? 'À renouveler' : 'Absente'}
+                              </span>
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -1112,62 +1200,329 @@ export default function MemberManager({
                     Dossier de Pièces Administratives
                   </h5>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Certificat Medical Selector */}
-                    <div className="bg-slate-50 border border-slate-150 rounded-xl p-4 space-y-2">
-                      <p className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                        Certificat Médical
-                      </p>
-                      <div className="grid grid-cols-3 gap-1">
-                        {[
-                          { key: 'valid', label: 'Valide', color: 'bg-emerald-600 text-white border-emerald-600', inactive: 'bg-white text-slate-600 hover:bg-emerald-50' },
-                          { key: 'renew', label: 'Renouveler', color: 'bg-amber-500 text-white border-amber-500', inactive: 'bg-white text-slate-600 hover:bg-amber-50' },
-                          { key: 'missing', label: 'Absent', color: 'bg-red-600 text-white border-red-600', inactive: 'bg-white text-slate-600 hover:bg-red-50' },
-                        ].map(opt => (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            onClick={() => setSelectedMemberForDetail({
-                              ...selectedMemberForDetail,
-                              medicalCertStatus: opt.key as any
-                            })}
-                            className={`py-1.5 rounded-lg text-[11px] font-bold border text-center transition cursor-pointer ${
-                              selectedMemberForDetail.medicalCertStatus === opt.key ? opt.color : opt.inactive
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
+                  <div className="space-y-4">
+                    {/* 1. Certificat Médical */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h6 className="font-extrabold text-slate-800 text-sm">Certificat Médical</h6>
+                            <p className="text-[10px] text-slate-400">À fournir par votre médecin traitant</p>
+                          </div>
+                        </div>
+                        
+                        <span className={`self-start sm:self-auto px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                          selectedMemberForDetail.medicalCertStatus === 'valid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                          selectedMemberForDetail.medicalCertStatus === 'renew' ? 'bg-amber-100 text-amber-700 border-amber-200 animate-pulse' :
+                          'bg-rose-100 text-rose-700 border-rose-200'
+                        }`}>
+                          {selectedMemberForDetail.medicalCertStatus === 'valid' ? '✓ Valide' :
+                           selectedMemberForDetail.medicalCertStatus === 'renew' ? '⚠ À renouveler' : '✗ Absent'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                        {/* Status Select */}
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Statut du document</span>
+                          <div className="grid grid-cols-3 gap-1">
+                            {[
+                              { key: 'valid', label: 'Valide', color: 'bg-emerald-600 text-white border-emerald-600', inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50' },
+                              { key: 'renew', label: 'Renouveler', color: 'bg-amber-500 text-white border-amber-500', inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50' },
+                              { key: 'missing', label: 'Absent', color: 'bg-red-600 text-white border-red-600', inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-red-50' },
+                            ].map(opt => (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setSelectedMemberForDetail({
+                                  ...selectedMemberForDetail,
+                                  medicalCertStatus: opt.key as any
+                                })}
+                                className={`py-1.5 rounded-lg text-[11px] font-bold border text-center transition cursor-pointer ${
+                                  selectedMemberForDetail.medicalCertStatus === opt.key ? opt.color : opt.inactive
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* File Upload / Download */}
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Fichier numérisé</span>
+                          {selectedMemberForDetail.medicalCertFile ? (
+                            <div className="bg-white border border-emerald-150 rounded-lg p-2 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <Paperclip className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <div className="overflow-hidden">
+                                  <p className="text-[11px] font-bold text-slate-700 truncate" title={selectedMemberForDetail.medicalCertFile.name}>
+                                    {selectedMemberForDetail.medicalCertFile.name}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400">
+                                    {(selectedMemberForDetail.medicalCertFile.size / 1024).toFixed(1)} Ko
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadUploadedFile(selectedMemberForDetail.medicalCertFile!)}
+                                  className="p-1 hover:bg-slate-100 rounded text-slate-600 transition cursor-pointer"
+                                  title="Télécharger"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteUploadedFile('medicalCert')}
+                                  className="p-1 hover:bg-rose-50 rounded text-rose-600 transition cursor-pointer"
+                                  title="Supprimer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="border border-dashed border-slate-200 hover:border-emerald-500 rounded-lg p-2 flex items-center justify-center gap-1.5 cursor-pointer transition bg-white text-center">
+                              <UploadCloud className="w-4 h-4 text-slate-400" />
+                              <span className="text-[11px] font-bold text-slate-600">Téléverser le certificat</span>
+                              <input
+                                type="file"
+                                accept=".pdf,.png,.jpg,.jpeg"
+                                onChange={(e) => handleDocumentUpload(e, 'medicalCert')}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Fiche d'Inscription Selector */}
-                    <div className="bg-slate-50 border border-slate-150 rounded-xl p-4 space-y-2">
-                      <p className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                        <FileText className="w-4 h-4 text-emerald-500" />
-                        Fiche d'Inscription
-                      </p>
-                      <div className="grid grid-cols-3 gap-1">
-                        {[
-                          { key: 'valid', label: 'Valide', color: 'bg-emerald-600 text-white border-emerald-600', inactive: 'bg-white text-slate-600 hover:bg-emerald-50' },
-                          { key: 'renew', label: 'Renouveler', color: 'bg-amber-500 text-white border-amber-500', inactive: 'bg-white text-slate-600 hover:bg-amber-50' },
-                          { key: 'missing', label: 'Absente', color: 'bg-red-600 text-white border-red-600', inactive: 'bg-white text-slate-600 hover:bg-red-50' },
-                        ].map(opt => (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            onClick={() => setSelectedMemberForDetail({
-                              ...selectedMemberForDetail,
-                              registrationFormStatus: opt.key as any
-                            })}
-                            className={`py-1.5 rounded-lg text-[11px] font-bold border text-center transition cursor-pointer ${
-                              selectedMemberForDetail.registrationFormStatus === opt.key ? opt.color : opt.inactive
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
+                    {/* 2. Fiche d'Inscription */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h6 className="font-extrabold text-slate-800 text-sm flex items-center gap-1.5">
+                              Fiche d'Inscription
+                            </h6>
+                            <p className="text-[10px] text-slate-400">Formulaire d'adhésion officiel</p>
+                          </div>
+                        </div>
+                        
+                        <span className={`self-start sm:self-auto px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                          selectedMemberForDetail.registrationFormStatus === 'valid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                          selectedMemberForDetail.registrationFormStatus === 'renew' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                          'bg-rose-100 text-rose-700 border-rose-200'
+                        }`}>
+                          {selectedMemberForDetail.registrationFormStatus === 'valid' ? '✓ Valide' :
+                           selectedMemberForDetail.registrationFormStatus === 'renew' ? '⚠ À renouveler' : '✗ Absente'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                        {/* Status Select & Download template */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Statut du document</span>
+                            <button
+                              type="button"
+                              onClick={() => generateRegistrationFormPDF(selectedMemberForDetail, club.name, club.sport)}
+                              className="text-[10px] font-extrabold text-emerald-700 hover:text-emerald-600 flex items-center gap-1 cursor-pointer transition"
+                            >
+                              <Download className="w-3 h-3" />
+                              Modèle PDF pré-rempli
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-1">
+                            {[
+                              { key: 'valid', label: 'Valide', color: 'bg-emerald-600 text-white border-emerald-600', inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50' },
+                              { key: 'renew', label: 'Renouveler', color: 'bg-amber-500 text-white border-amber-500', inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50' },
+                              { key: 'missing', label: 'Absent', color: 'bg-red-600 text-white border-red-600', inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-red-50' },
+                            ].map(opt => (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setSelectedMemberForDetail({
+                                  ...selectedMemberForDetail,
+                                  registrationFormStatus: opt.key as any
+                                })}
+                                className={`py-1.5 rounded-lg text-[11px] font-bold border text-center transition cursor-pointer ${
+                                  selectedMemberForDetail.registrationFormStatus === opt.key ? opt.color : opt.inactive
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* File Upload / Download */}
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Fichier signé</span>
+                          {selectedMemberForDetail.registrationFormFile ? (
+                            <div className="bg-white border border-emerald-150 rounded-lg p-2 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <Paperclip className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <div className="overflow-hidden">
+                                  <p className="text-[11px] font-bold text-slate-700 truncate" title={selectedMemberForDetail.registrationFormFile.name}>
+                                    {selectedMemberForDetail.registrationFormFile.name}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400">
+                                    {(selectedMemberForDetail.registrationFormFile.size / 1024).toFixed(1)} Ko
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadUploadedFile(selectedMemberForDetail.registrationFormFile!)}
+                                  className="p-1 hover:bg-slate-100 rounded text-slate-600 transition cursor-pointer"
+                                  title="Télécharger"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteUploadedFile('registrationForm')}
+                                  className="p-1 hover:bg-rose-50 rounded text-rose-600 transition cursor-pointer"
+                                  title="Supprimer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="border border-dashed border-slate-200 hover:border-emerald-500 rounded-lg p-2 flex items-center justify-center gap-1.5 cursor-pointer transition bg-white text-center">
+                              <UploadCloud className="w-4 h-4 text-slate-400" />
+                              <span className="text-[11px] font-bold text-slate-600">Téléverser la fiche signée</span>
+                              <input
+                                type="file"
+                                accept=".pdf,.png,.jpg,.jpeg"
+                                onChange={(e) => handleDocumentUpload(e, 'registrationForm')}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. Autorisation Parentale */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center">
+                            <Award className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h6 className="font-extrabold text-slate-800 text-sm">Autorisation Parentale</h6>
+                            <p className="text-[10px] text-slate-400">Requis pour les membres mineurs</p>
+                          </div>
+                        </div>
+                        
+                        <span className={`self-start sm:self-auto px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                          (selectedMemberForDetail.parentalAuthStatus || 'missing') === 'valid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                          (selectedMemberForDetail.parentalAuthStatus || 'missing') === 'renew' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                          'bg-rose-100 text-rose-700 border-rose-200'
+                        }`}>
+                          {(selectedMemberForDetail.parentalAuthStatus || 'missing') === 'valid' ? '✓ Valide' :
+                           (selectedMemberForDetail.parentalAuthStatus || 'missing') === 'renew' ? '⚠ À renouveler' : '✗ Absente'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                        {/* Status Select & Download template */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Statut du document</span>
+                            <button
+                              type="button"
+                              onClick={() => generateParentalAuthPDF(selectedMemberForDetail, club.name)}
+                              className="text-[10px] font-extrabold text-emerald-700 hover:text-emerald-600 flex items-center gap-1 cursor-pointer transition"
+                            >
+                              <Download className="w-3 h-3" />
+                              Modèle PDF pré-rempli
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-1">
+                            {[
+                              { key: 'valid', label: 'Valide', color: 'bg-emerald-600 text-white border-emerald-600', inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50' },
+                              { key: 'renew', label: 'Renouveler', color: 'bg-amber-500 text-white border-amber-500', inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50' },
+                              { key: 'missing', label: 'Absent', color: 'bg-red-600 text-white border-red-600', inactive: 'bg-white text-slate-600 border-slate-200 hover:bg-red-50' },
+                            ].map(opt => (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setSelectedMemberForDetail({
+                                  ...selectedMemberForDetail,
+                                  parentalAuthStatus: opt.key as any
+                                })}
+                                className={`py-1.5 rounded-lg text-[11px] font-bold border text-center transition cursor-pointer ${
+                                  (selectedMemberForDetail.parentalAuthStatus || 'missing') === opt.key ? opt.color : opt.inactive
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* File Upload / Download */}
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Fichier signé</span>
+                          {selectedMemberForDetail.parentalAuthFile ? (
+                            <div className="bg-white border border-emerald-150 rounded-lg p-2 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <Paperclip className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <div className="overflow-hidden">
+                                  <p className="text-[11px] font-bold text-slate-700 truncate" title={selectedMemberForDetail.parentalAuthFile.name}>
+                                    {selectedMemberForDetail.parentalAuthFile.name}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400">
+                                    {(selectedMemberForDetail.parentalAuthFile.size / 1024).toFixed(1)} Ko
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadUploadedFile(selectedMemberForDetail.parentalAuthFile!)}
+                                  className="p-1 hover:bg-slate-100 rounded text-slate-600 transition cursor-pointer"
+                                  title="Télécharger"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteUploadedFile('parentalAuth')}
+                                  className="p-1 hover:bg-rose-50 rounded text-rose-600 transition cursor-pointer"
+                                  title="Supprimer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="border border-dashed border-slate-200 hover:border-emerald-500 rounded-lg p-2 flex items-center justify-center gap-1.5 cursor-pointer transition bg-white text-center">
+                              <UploadCloud className="w-4 h-4 text-slate-400" />
+                              <span className="text-[11px] font-bold text-slate-600">Téléverser l'autorisation signée</span>
+                              <input
+                                type="file"
+                                accept=".pdf,.png,.jpg,.jpeg"
+                                onChange={(e) => handleDocumentUpload(e, 'parentalAuth')}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
