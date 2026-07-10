@@ -21,6 +21,10 @@ export interface Member {
   membershipPaid?: boolean;
   membershipAmount?: number;
   createdAt: string;
+  photoUrl?: string;
+  equipmentSize?: string; // e.g. XS, S, M, L, XL, XXL
+  medicalCertStatus?: 'valid' | 'renew' | 'missing';
+  registrationFormStatus?: 'valid' | 'renew' | 'missing';
 }
 
 export interface Team {
@@ -89,3 +93,17 @@ export interface Message {
   type: 'announcement' | 'message';
   createdAt: string;
 }
+
+export interface PlayerMatchStat {
+  id: string; // eventId_memberId
+  clubId: string;
+  eventId: string;
+  memberId: string;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  rating: number; // e.g. 1 to 10, or 0 if unrated
+  comment?: string;
+}
+

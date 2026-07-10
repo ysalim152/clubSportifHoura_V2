@@ -22,7 +22,10 @@ service cloud.firestore {
 
     // Helper to check if user is a member of the club
     function isMember(clubId) {
-      return isVerified() && exists(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid));
+      return isVerified() && (
+        exists(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/clubs/$(clubId)) && get(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid)
+      );
     }
 
     function getMember(clubId) {
@@ -30,11 +33,17 @@ service cloud.firestore {
     }
 
     function isClubAdmin(clubId) {
-      return isMember(clubId) && getMember(clubId).role == 'admin';
+      return isVerified() && (
+        (exists(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid)) && getMember(clubId).role == 'admin') ||
+        (exists(/databases/$(database)/documents/clubs/$(clubId)) && get(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid)
+      );
     }
 
     function isClubCoach(clubId) {
-      return isMember(clubId) && (getMember(clubId).role == 'coach' || getMember(clubId).role == 'admin');
+      return isVerified() && (
+        (exists(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid)) && (getMember(clubId).role == 'coach' || getMember(clubId).role == 'admin')) ||
+        (exists(/databases/$(database)/documents/clubs/$(clubId)) && get(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid)
+      );
     }
     
     // Protect Users (MFA settings etc.)
@@ -145,6 +154,13 @@ service cloud.firestore {
 
           allow delete: if isVerified() && isClubCoach(clubId);
         }
+
+      // Sub-collection: Player Stats (Match report statistics)
+      match /playerStats/{statId} {
+        allow read: if isVerified() && isMember(clubId);
+        allow create, update: if isVerified() && isValidId(statId) && isClubCoach(clubId) &&
+                               request.resource.data.clubId == clubId;
+        allow delete: if isVerified() && isClubCoach(clubId);
       }
 
       // Sub-collection: Payments

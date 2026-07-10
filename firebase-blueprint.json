@@ -131,6 +131,24 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "clubId", "senderId", "senderName", "content", "type", "createdAt"]
+    },
+    "PlayerMatchStat": {
+      "title": "PlayerMatchStat",
+      "description": "Individual player stats and rating for a specific match event.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "eventId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "goals": { "type": "number" },
+        "assists": { "type": "number" },
+        "yellowCards": { "type": "number" },
+        "redCards": { "type": "number" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" }
+      },
+      "required": ["id", "clubId", "eventId", "memberId", "goals", "assists", "yellowCards", "redCards", "rating"]
     }
   },
   "firestore": {
@@ -153,6 +171,10 @@
     "/clubs/{clubId}/events/{eventId}/convocations/{convocationId}": {
       "schema": "Convocation",
       "description": "Player summons and attendance statuses for events."
+    },
+    "/clubs/{clubId}/playerStats/{statId}": {
+      "schema": "PlayerMatchStat",
+      "description": "Statistics and performance reports for a player in a specific match."
     },
     "/clubs/{clubId}/payments/{paymentId}": {
       "schema": "Payment",

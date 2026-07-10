@@ -149,6 +149,32 @@ export default function App() {
       membersSnap.forEach(doc => {
         membersList.push({ id: doc.id, ...doc.data() } as Member);
       });
+
+      // Self-healing: if the current user is the club creator and has no member document, create it
+      if (currentUser) {
+        const hasCreatorAsMember = membersList.some(m => m.id === currentUser.uid);
+        if (!hasCreatorAsMember && selectedClub.createdBy === currentUser.uid) {
+          const memberId = currentUser.uid;
+          const memberData: Member = {
+            id: memberId,
+            clubId: selectedClub.id,
+            firstName: currentUser.displayName?.split(' ')[0] || 'Admin',
+            lastName: currentUser.displayName?.split(' ').slice(1).join(' ') || 'Club',
+            role: 'admin',
+            email: currentUser.email || '',
+            membershipAmount: 0,
+            membershipPaid: true,
+            createdAt: new Date().toISOString()
+          };
+          try {
+            await setDoc(doc(db, 'clubs', selectedClub.id, 'members', memberId), memberData);
+            membersList.push(memberData);
+          } catch (e) {
+            console.error("Error creating creator member doc:", e);
+          }
+        }
+      }
+
       setMembers(membersList);
 
       // Fetch teams
@@ -345,7 +371,7 @@ export default function App() {
   return (
     <div id="hourasports-app" className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
       {/* Sidebar navigation */}
-      <aside className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-850">
+      <aside className="w-full md:w-72 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-850">
         <div className="p-6 space-y-8">
           {/* Logo Brand */}
           <div className="flex items-center gap-3">
@@ -392,7 +418,7 @@ export default function App() {
                   }`}
                 >
                   <item.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                  <span>{item.label}</span>
+                  <span className="whitespace-nowrap">{item.label}</span>
                 </button>
               );
             })}
