@@ -24,6 +24,42 @@ export default function MemberManager({
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [teamFilter, setTeamFilter] = useState<string>('all');
+  const [ageFilter, setAgeFilter] = useState<string>('all');
+
+  // Age categorization function
+  const getAgeCategory = (birthDateString: string | undefined): string => {
+    if (!birthDateString) return 'Non renseigné';
+    const birthDate = new Date(birthDateString);
+    if (isNaN(birthDate.getTime())) return 'Non renseigné';
+    
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+
+    if (age < 7) return 'U7 (<7 ans)';
+    if (age < 9) return 'U9 (7-8)';
+    if (age < 11) return 'U11 (9-10)';
+    if (age < 13) return 'U13 (11-12)';
+    if (age < 15) return 'U15 (13-14)';
+    if (age < 18) return 'U18 (15-17)';
+    if (age < 35) return 'Seniors';
+    return 'Vétérans';
+  };
+
+  const categoriesOrder = [
+    'U7 (<7 ans)',
+    'U9 (7-8)',
+    'U11 (9-10)',
+    'U13 (11-12)',
+    'U15 (13-14)',
+    'U18 (15-17)',
+    'Seniors',
+    'Vétérans',
+    'Non renseigné'
+  ];
   
   // Modals / Forms
   const [showMemberForm, setShowMemberForm] = useState(quickAction === 'add_member');
@@ -230,9 +266,9 @@ export default function MemberManager({
       (m.licenseNumber && m.licenseNumber.includes(searchTerm));
     
     const matchesRole = roleFilter === 'all' ? true : m.role === roleFilter;
+    const matchesAge = ageFilter === 'all' ? true : getAgeCategory(m.birthDate) === ageFilter;
 
-    // Filter by team requires searching through events/members, but since members are registered club wide, we can support simple team assignment. For now role filtering is highly robust.
-    return matchesSearch && matchesRole;
+    return matchesSearch && matchesRole && matchesAge;
   });
 
   return (
@@ -267,45 +303,106 @@ export default function MemberManager({
       )}
 
       {/* MEMBERS SUB TAB */}
-      {activeSubTab === 'members' && (
-        <div className="space-y-6">
-          {/* Controls Bar */}
-          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
-            <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Rechercher par nom, prénom, licence..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-600 text-sm"
-                />
+      {activeSubTab === 'members' && (() => {
+        const ageCounts: Record<string, number> = {};
+        categoriesOrder.forEach(cat => { ageCounts[cat] = 0; });
+        members.forEach(m => {
+          const cat = getAgeCategory(m.birthDate);
+          if (ageCounts[cat] !== undefined) {
+            ageCounts[cat]++;
+          } else {
+            ageCounts['Non renseigné']++;
+          }
+        });
+
+        const categoriesWithData = categoriesOrder
+          .map(name => ({ name, count: ageCounts[name] }))
+          .filter(item => item.count > 0);
+
+        return (
+          <div className="space-y-6">
+            {/* Quick Category Summary Badges */}
+            {categoriesWithData.length > 0 && (
+              <div id="age-categories-summary-row" className="bg-slate-50 border border-slate-150 rounded-2xl p-4 flex flex-wrap items-center gap-2 shadow-sm">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">Catégories d'âge :</span>
+                {categoriesWithData.map((cat, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setAgeFilter(ageFilter === cat.name ? 'all' : cat.name)}
+                    className={`border rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                      ageFilter === cat.name
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
+                    }`}
+                    title="Cliquez pour filtrer"
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${ageFilter === cat.name ? 'bg-white' : 'bg-emerald-500'}`}></span>
+                    <span>{cat.name} :</span>
+                    <span className="font-extrabold">{cat.count}</span>
+                  </button>
+                ))}
+                {ageFilter !== 'all' && (
+                  <button
+                    onClick={() => setAgeFilter('all')}
+                    className="text-xs font-bold text-slate-500 hover:text-slate-800 transition cursor-pointer underline ml-auto"
+                  >
+                    Réinitialiser le filtre
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Controls Bar */}
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
+              <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher par nom, prénom, licence..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-600 text-sm"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl">
+                  <Filter className="w-4 h-4 text-slate-400" />
+                  <select
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                    className="bg-transparent border-none text-xs font-semibold text-slate-600 focus:outline-none bg-white"
+                  >
+                    <option value="all">Tous les rôles</option>
+                    <option value="player">Joueurs</option>
+                    <option value="coach">Coachs</option>
+                    <option value="admin">Administrateurs</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl">
+                  <Calendar className="w-4 h-4 text-slate-400" />
+                  <select
+                    value={ageFilter}
+                    onChange={(e) => setAgeFilter(e.target.value)}
+                    className="bg-transparent border-none text-xs font-semibold text-slate-600 focus:outline-none bg-white"
+                  >
+                    <option value="all">Toutes les catégories</option>
+                    {categoriesOrder.map((cat, idx) => (
+                      <option key={idx} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl">
-                <Filter className="w-4 h-4 text-slate-400" />
-                <select
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                  className="bg-transparent border-none text-xs font-semibold text-slate-600 focus:outline-none"
-                >
-                  <option value="all">Tous les rôles</option>
-                  <option value="player">Joueurs</option>
-                  <option value="coach">Coachs</option>
-                  <option value="admin">Administrateurs</option>
-                </select>
-              </div>
+              <button
+                onClick={() => setShowMemberForm(true)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                Nouveau Membre
+              </button>
             </div>
-
-            <button
-              onClick={() => setShowMemberForm(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow flex items-center justify-center gap-2 transition cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              Nouveau Membre
-            </button>
-          </div>
 
           {/* Member Registration / Edit Drawer or Modal */}
           {showMemberForm && (
@@ -461,14 +558,21 @@ export default function MemberManager({
                             </div>
                             <div>
                               <p className="font-bold text-slate-900">{m.firstName} {m.lastName}</p>
-                              {m.licenseNumber ? (
-                                <p className="text-[10px] font-semibold text-slate-400 flex items-center gap-1 mt-0.5">
-                                  <Clipboard className="w-3 h-3 text-slate-300" />
-                                  {m.licenseNumber}
-                                </p>
-                              ) : (
-                                <span className="text-[10px] font-semibold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">Licence manquante</span>
-                              )}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                {m.birthDate && (
+                                  <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded inline-block">
+                                    {getAgeCategory(m.birthDate)}
+                                  </span>
+                                )}
+                                {m.licenseNumber ? (
+                                  <span className="text-[10px] font-semibold text-slate-400 flex items-center gap-1">
+                                    <Clipboard className="w-3 h-3 text-slate-300" />
+                                    {m.licenseNumber}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-semibold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded inline-block">Licence manquante</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -518,7 +622,8 @@ export default function MemberManager({
             </div>
           </div>
         </div>
-      )}
+      );
+    })()}
 
       {/* TEAMS SUB TAB */}
       {activeSubTab === 'teams' && (

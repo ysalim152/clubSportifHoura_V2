@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   Users, Calendar, CreditCard, MessageSquare, Plus, Activity, 
@@ -21,6 +21,8 @@ export default function Dashboard({
   club, members, teams, events, payments, onNavigate, onOpenQuickAction 
 }: DashboardProps) {
   
+  const [memberDistType, setMemberDistType] = useState<'role' | 'age'>('role');
+
   // Computations
   const totalMembers = members.length;
   const playersCount = members.filter(m => m.role === 'player').length;
@@ -49,6 +51,59 @@ export default function Dashboard({
     { name: 'Coachs', count: coachesCount },
     { name: 'Admins', count: members.filter(m => m.role === 'admin').length }
   ];
+
+  // Age categorization function
+  const getAgeCategory = (birthDateString: string | undefined): string => {
+    if (!birthDateString) return 'Non renseigné';
+    const birthDate = new Date(birthDateString);
+    if (isNaN(birthDate.getTime())) return 'Non renseigné';
+    
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+
+    if (age < 7) return 'U7 (<7 ans)';
+    if (age < 9) return 'U9 (7-8)';
+    if (age < 11) return 'U11 (9-10)';
+    if (age < 13) return 'U13 (11-12)';
+    if (age < 15) return 'U15 (13-14)';
+    if (age < 18) return 'U18 (15-17)';
+    if (age < 35) return 'Seniors';
+    return 'Vétérans';
+  };
+
+  const categoriesOrder = [
+    'U7 (<7 ans)',
+    'U9 (7-8)',
+    'U11 (9-10)',
+    'U13 (11-12)',
+    'U15 (13-14)',
+    'U18 (15-17)',
+    'Seniors',
+    'Vétérans',
+    'Non renseigné'
+  ];
+
+  const ageCounts: Record<string, number> = {};
+  categoriesOrder.forEach(cat => {
+    ageCounts[cat] = 0;
+  });
+
+  members.forEach(m => {
+    const cat = getAgeCategory(m.birthDate);
+    if (ageCounts[cat] !== undefined) {
+      ageCounts[cat]++;
+    } else {
+      ageCounts['Non renseigné']++;
+    }
+  });
+
+  const ageData = categoriesOrder
+    .map(name => ({ name, count: ageCounts[name] }))
+    .filter(item => item.count > 0);
 
   return (
     <div id="dashboard-tab" className="space-y-8">
@@ -221,19 +276,46 @@ export default function Dashboard({
         </div>
 
         {/* Member distribution */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+        <div id="member-distribution-card" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
           <div>
-            <h3 className="font-bold text-slate-900 text-lg mb-4">Répartition des Effectifs</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-slate-900 text-lg">Effectifs</h3>
+              <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                <button
+                  id="btn-dist-role"
+                  onClick={() => setMemberDistType('role')}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition cursor-pointer ${
+                    memberDistType === 'role'
+                      ? 'bg-white text-emerald-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Rôles
+                </button>
+                <button
+                  id="btn-dist-age"
+                  onClick={() => setMemberDistType('age')}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition cursor-pointer ${
+                    memberDistType === 'age'
+                      ? 'bg-white text-emerald-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Âges
+                </button>
+              </div>
+            </div>
+
             <div className="h-48 w-full flex items-center justify-center">
               {totalMembers === 0 ? (
                 <p className="text-xs text-slate-400">Aucun effectif renseigné pour l'instant.</p>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={roleData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <BarChart data={memberDistType === 'role' ? roleData : ageData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <XAxis dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
                     <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip cursor={{ fill: 'rgba(241, 245, 249, 0.5)' }} />
-                    <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={28} />
+                    <Tooltip cursor={{ fill: 'rgba(241, 245, 249, 0.5)' }} formatter={(value) => [`${value} membre(s)`, 'Effectif']} />
+                    <Bar dataKey="count" fill={memberDistType === 'role' ? '#3b82f6' : '#10b981'} radius={[6, 6, 0, 0]} barSize={28} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -242,6 +324,7 @@ export default function Dashboard({
 
           <div className="border-t border-slate-100 pt-4 mt-4">
             <button
+              id="btn-manage-members-link"
               onClick={() => onNavigate('membres')}
               className="w-full text-center text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer"
             >
