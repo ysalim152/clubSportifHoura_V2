@@ -166,6 +166,25 @@ service cloud.firestore {
         allow delete: if isVerified() && isClubAdmin(clubId);
       }
 
+      // Sub-collection: Expenses
+      match /expenses/{expenseId} {
+        allow read: if isVerified() && isMember(clubId);
+        
+        allow create: if isVerified() && isValidId(expenseId) && isClubAdmin(clubId) &&
+                       request.resource.data.clubId == clubId &&
+                       request.resource.data.title is string && request.resource.data.title.size() <= 200 &&
+                       request.resource.data.amount is number &&
+                       request.resource.data.category in ['equipment', 'transport', 'referee', 'other'];
+
+        allow update: if isVerified() && isValidId(expenseId) && isClubAdmin(clubId) &&
+                       request.resource.data.clubId == resource.data.clubId &&
+                       request.resource.data.title is string && request.resource.data.title.size() <= 200 &&
+                       request.resource.data.amount is number &&
+                       request.resource.data.category in ['equipment', 'transport', 'referee', 'other'];
+
+        allow delete: if isVerified() && isClubAdmin(clubId);
+      }
+
       // Sub-collection: Messages
       match /messages/{messageId} {
         allow read: if isVerified() && isMember(clubId);

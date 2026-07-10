@@ -69,6 +69,16 @@ export interface Payment {
   date: string;
 }
 
+export interface Expense {
+  id: string;
+  clubId: string;
+  title: string;
+  amount: number;
+  category: 'equipment' | 'transport' | 'referee' | 'other';
+  description?: string;
+  date: string;
+}
+
 export interface Message {
   id: string;
   clubId: string;

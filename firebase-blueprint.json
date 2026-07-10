@@ -101,6 +101,21 @@
       },
       "required": ["id", "clubId", "memberId", "amount", "status", "date"]
     },
+    "Expense": {
+      "title": "Expense",
+      "description": "An expense or purchase made by the club.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "title": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string", "enum": ["equipment", "transport", "referee", "other"] },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clubId", "title", "amount", "category", "date"]
+    },
     "Message": {
       "title": "Message",
       "description": "An announcement or chat message shared with a club or team.",
@@ -142,6 +157,10 @@
     "/clubs/{clubId}/payments/{paymentId}": {
       "schema": "Payment",
       "description": "Financial dues and payments of club members."
+    },
+    "/clubs/{clubId}/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Expenses and costs of the club (equipment, transport, refereeing, etc.)."
     },
     "/clubs/{clubId}/messages/{messageId}": {
       "schema": "Message",
