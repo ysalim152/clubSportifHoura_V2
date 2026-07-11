@@ -4,12 +4,12 @@ import {
   Activity, Users, Calendar, CreditCard, MessageSquare, LogOut, 
   ChevronRight, LayoutDashboard, Compass, RefreshCw, AlertCircle,
   ShieldCheck, Settings2, ShieldAlert, X, Brain, MessageSquareHeart,
-  User as UserIcon
+  User as UserIcon, Shirt
 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType, logout } from './firebase';
-import { Club, Member, Team, Event, Payment } from './types';
+import { Club, Member, Team, Event, Payment, Equipment } from './types';
 
 import AuthScreen from './components/AuthScreen';
 import ClubManager from './components/ClubManager';
@@ -25,6 +25,7 @@ import SuperUserDashboard from './components/SuperUserDashboard';
 import SettingsManager from './components/SettingsManager';
 import FeedbackManager from './components/FeedbackManager';
 import UserProfileManager from './components/UserProfileManager';
+import EquipmentManager from './components/EquipmentManager';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -53,6 +54,7 @@ export default function App() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [equipments, setEquipments] = useState<Equipment[]>([]);
 
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
@@ -218,6 +220,17 @@ export default function App() {
         paymentsList.push({ id: doc.id, ...doc.data() } as Payment);
       });
       setPayments(paymentsList);
+
+      // Fetch equipments
+      const equipmentsSnap = await getDocs(collection(db, 'clubs', selectedClub.id, 'equipments')).catch(err => {
+        handleFirestoreError(err, OperationType.LIST, `clubs/${selectedClub.id}/equipments`);
+        throw err;
+      });
+      const equipmentsList: Equipment[] = [];
+      equipmentsSnap.forEach(doc => {
+        equipmentsList.push({ id: doc.id, ...doc.data() } as Equipment);
+      });
+      setEquipments(equipmentsList);
 
     } catch (err: any) {
       setError("Certains chargements de données ont échoué: " + err.message);
@@ -422,6 +435,7 @@ export default function App() {
     { id: 'profil', label: 'Mon Profil', icon: UserIcon },
     { id: 'membres', label: 'Membres & Équipes', icon: Users },
     { id: 'calendrier', label: 'Calendrier & Matchs', icon: Calendar },
+    { id: 'equipements', label: 'Équipements & Matériel', icon: Shirt },
     { id: 'finances', label: 'Cotisations & Finances', icon: CreditCard },
     { id: 'strategie', label: 'Décisions & SWOT IA', icon: Brain },
     { id: 'messagerie', label: 'Messagerie Club', icon: MessageSquare },
@@ -448,6 +462,10 @@ export default function App() {
 
     if (item.id === 'calendrier') {
       return true;
+    }
+
+    if (item.id === 'equipements') {
+      return userRole !== 'visiteur';
     }
 
     if (item.id === 'finances') {
@@ -648,6 +666,16 @@ export default function App() {
                     onRefresh={fetchClubData}
                     quickAction={quickAction}
                     clearQuickAction={() => setQuickAction(null)}
+                  />
+                )}
+
+                {activeTab === 'equipements' && (
+                  <EquipmentManager 
+                    club={selectedClub} 
+                    members={members} 
+                    equipments={equipments} 
+                    onRefresh={fetchClubData}
+                    userRole={userRole}
                   />
                 )}
 

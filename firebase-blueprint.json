@@ -183,12 +183,35 @@
         "adminResponderEmail": { "type": "string" }
       },
       "required": ["id", "clubId", "userId", "userName", "userEmail", "userRole", "title", "description", "type", "category", "rating", "status", "createdAt"]
+    },
+    "Equipment": {
+      "title": "Equipment",
+      "description": "Represents an equipment item owned and tracked by the sports club.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "totalQuantity": { "type": "number" },
+        "allocatedQuantity": { "type": "number" },
+        "availableQuantity": { "type": "number" },
+        "size": { "type": "string" },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clubId", "name", "category", "totalQuantity", "allocatedQuantity", "availableQuantity", "createdAt"]
     }
   },
   "firestore": {
     "/clubs/{clubId}": {
       "schema": "Club",
       "description": "Sports club records."
+    },
+    "/clubs/{clubId}/equipments/{equipmentId}": {
+      "schema": "Equipment",
+      "description": "Inventory of sports equipment and gear."
     },
     "/clubs/{clubId}/members/{memberId}": {
       "schema": "Member",

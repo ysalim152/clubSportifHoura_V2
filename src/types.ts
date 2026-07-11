@@ -147,3 +147,18 @@ export interface FeedbackItem {
   adminResponderEmail?: string;
 }
 
+export interface Equipment {
+  id: string;
+  clubId: string;
+  name: string;
+  category: string; // e.g., 'maillots', 'ballons', 'plots', 'pharmacie', 'autre'
+  totalQuantity: number;
+  allocatedQuantity: number;
+  availableQuantity: number;
+  size?: string; // e.g. XS, S, M, L, XL, Unique
+  location?: string; // e.g. Armoire A, Local 1
+  description?: string;
+  createdAt: string;
+}
+
+

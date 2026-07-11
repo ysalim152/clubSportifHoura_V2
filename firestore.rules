@@ -239,6 +239,27 @@ service cloud.firestore {
         allow write: if isVerified() && isClubAdmin(clubId);
       }
 
+      // Sub-collection: Equipments
+      match /equipments/{equipmentId} {
+        allow read: if isVerified() && isMember(clubId);
+        
+        allow create: if isVerified() && isValidId(equipmentId) && isClubAdmin(clubId) &&
+                       request.resource.data.clubId == clubId &&
+                       request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
+                       request.resource.data.totalQuantity is number &&
+                       request.resource.data.allocatedQuantity is number &&
+                       request.resource.data.availableQuantity is number;
+
+        allow update: if isVerified() && isValidId(equipmentId) && isClubAdmin(clubId) &&
+                       request.resource.data.clubId == resource.data.clubId &&
+                       request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
+                       request.resource.data.totalQuantity is number &&
+                       request.resource.data.allocatedQuantity is number &&
+                       request.resource.data.availableQuantity is number;
+
+        allow delete: if isVerified() && isClubAdmin(clubId);
+      }
+
       // Sub-collection: Feedbacks
       match /feedbacks/{feedbackId} {
         allow read: if isVerified() && (isClubAdmin(clubId) || (resource != null && resource.data.userId == request.auth.uid));
