@@ -24,7 +24,7 @@
         "clubId": { "type": "string" },
         "firstName": { "type": "string" },
         "lastName": { "type": "string" },
-        "role": { "type": "string", "enum": ["player", "coach", "admin"] },
+        "role": { "type": "string", "enum": ["admin", "president", "vice_president_1", "vice_president_2", "sec_general", "tresorier", "membre_actif", "adherent", "player", "visiteur", "coach"] },
         "email": { "type": "string", "format": "email" },
         "phone": { "type": "string" },
         "licenseNumber": { "type": "string" },
@@ -149,6 +149,40 @@
         "comment": { "type": "string" }
       },
       "required": ["id", "clubId", "eventId", "memberId", "goals", "assists", "yellowCards", "redCards", "rating"]
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "Global application configuration settings.",
+      "type": "object",
+      "properties": {
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      }
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User feedback, suggestions, and bug reports.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userRole": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string" },
+        "category": { "type": "string" },
+        "priority": { "type": "string" },
+        "rating": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "adminResponse": { "type": "string" },
+        "adminRespondedAt": { "type": "string" },
+        "adminResponderEmail": { "type": "string" }
+      },
+      "required": ["id", "clubId", "userId", "userName", "userEmail", "userRole", "title", "description", "type", "category", "rating", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -187,6 +221,14 @@
     "/clubs/{clubId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Communications, updates, and announcements shared by admins/coaches."
+    },
+    "/clubs/{clubId}/settings/{settingId}": {
+      "schema": "SystemSettings",
+      "description": "System-wide and club-specific settings."
+    },
+    "/clubs/{clubId}/feedbacks/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "User suggestions, complaints, and bug reports sub-collection."
     }
   }
 }

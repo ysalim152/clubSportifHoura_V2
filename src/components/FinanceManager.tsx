@@ -444,9 +444,27 @@ export default function FinanceManager({
                         className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-white"
                       >
                         <option value="">Sélectionner un membre...</option>
-                        {members.map(m => (
-                          <option key={m.id} value={m.id}>{m.firstName} {m.lastName} ({m.role === 'player' ? 'Joueur' : m.role === 'coach' ? 'Entraîneur' : 'Admin'})</option>
-                        ))}
+                        {members.map(m => {
+                          const roleLabel = {
+                            admin: 'Administrateur',
+                            president: "Président",
+                            vice_president_1: "1er Vice-président",
+                            vice_president_2: "2e Vice-président",
+                            sec_general: "Secrétaire Général",
+                            tresorier: "Trésorier",
+                            membre_actif: "Membre Actif",
+                            adherent: "Adhérent",
+                            player: "Joueur",
+                            visiteur: "Visiteur",
+                            coach: "Entraîneur"
+                          }[m.role] || m.role;
+                          const isExempt = m.membershipAmount === 0 || ['president', 'vice_president_1', 'vice_president_2', 'sec_general', 'tresorier', 'membre_actif', 'visiteur'].includes(m.role);
+                          return (
+                            <option key={m.id} value={m.id}>
+                              {m.firstName} {m.lastName} ({roleLabel}{isExempt ? ' - Exonéré' : ''})
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
 
@@ -583,7 +601,21 @@ export default function FinanceManager({
                                   </div>
                                   <div>
                                     <p className="font-bold text-slate-900">{member ? `${member.firstName} ${member.lastName}` : "Membre supprimé"}</p>
-                                    <p className="text-[10px] text-slate-400 font-semibold">{member?.role === 'player' ? 'Joueur' : 'Staff'}</p>
+                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                      {member ? ({
+                                        admin: 'Administrateur',
+                                        president: "Président de l'association",
+                                        vice_president_1: "1er Vice-président",
+                                        vice_president_2: "2e Vice-président",
+                                        sec_general: "Secrétaire Général",
+                                        tresorier: "Trésorier",
+                                        membre_actif: "Membre Actif",
+                                        adherent: "Adhérent",
+                                        player: "Joueur",
+                                        visiteur: "Visiteur",
+                                        coach: "Entraîneur"
+                                      }[member.role] || member.role) : ""}
+                                    </p>
                                   </div>
                                 </div>
                               </td>

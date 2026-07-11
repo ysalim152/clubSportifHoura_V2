@@ -24,7 +24,7 @@ export default function AuthScreen({ onLoginSuccess, isLoading, setIsLoading, er
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState<'admin' | 'coach' | 'player'>('player');
+  const [role, setRole] = useState<string>('player');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
 
@@ -368,17 +368,38 @@ export default function AuthScreen({ onLoginSuccess, isLoading, setIsLoading, er
                 </label>
                 <select
                   value={role}
-                  onChange={(e) => setRole(e.target.value as any)}
+                  onChange={(e) => setRole(e.target.value)}
                   disabled={isLoading}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 text-sm outline-none text-slate-900 disabled:opacity-60 cursor-pointer"
                 >
-                  <option value="player">Joueur</option>
-                  <option value="coach">Coach</option>
-                  <option value="admin">Administrateur</option>
+                  <option value="admin">Administrateur (Accès complet)</option>
+                  <option value="president">Président de l'association (Exécutif / Exonéré)</option>
+                  <option value="vice_president_1">Premier vice président (Exécutif / Exonéré)</option>
+                  <option value="vice_president_2">Deuxième vice président (Exécutif / Exonéré)</option>
+                  <option value="sec_general">Secrétaire Général (Exécutif / Exonéré)</option>
+                  <option value="tresorier">Trésorier (Exécutif / Exonéré)</option>
+                  <option value="membre_actif">Membre Actif (Exécutif / Exonéré)</option>
+                  <option value="adherent">Adhérent (Avec cotisation annuelle)</option>
+                  <option value="player">Joueur (Avec cotisation, inscrit aux disciplines)</option>
+                  <option value="visiteur">Visiteur (Lecture seule, sans adhésion)</option>
                 </select>
-                <p className="text-[10px] text-slate-400 italic leading-snug">
-                  Note : L'inscription et l'attribution du rôle doivent être validées par le super-utilisateur de l'application.
-                </p>
+                <div className="bg-slate-50 border border-slate-150 rounded-xl p-3 text-[11px] text-slate-500 space-y-1">
+                  <p className="font-bold text-slate-600">
+                    {role === 'admin' && "• Administrateur : Accès complet de gestion et configuration globale."}
+                    {role === 'president' && "• Président de l'association : Rôle exécutif suprême. Exonéré de cotisation."}
+                    {role === 'vice_president_1' && "• Premier vice président : Gestion administrative générale. Exonéré."}
+                    {role === 'vice_president_2' && "• Deuxième vice président : Responsabilité sportive et évènements. Exonéré."}
+                    {role === 'sec_general' && "• Secrétaire Général : Gestion administrative, convocations et fiches d'inscription. Exonéré."}
+                    {role === 'tresorier' && "• Trésorier : Gestion financière, cotisations, dépenses et encaissements. Exonéré."}
+                    {role === 'membre_actif' && "• Membre Actif : Participation active aux décisions du club. Exonéré."}
+                    {role === 'adherent' && "• Adhérent : Accès standard de membre adhérent soumis à cotisation annuelle."}
+                    {role === 'player' && "• Joueur : Pratique sportive, inscrit aux disciplines et matchs, soumis à cotisation."}
+                    {role === 'visiteur' && "• Visiteur : Accès limité en lecture seule. Sans adhésion ni cotisation."}
+                  </p>
+                  <p className="italic text-slate-400">
+                    Note : L'inscription et l'attribution du rôle doivent être validées par le super-utilisateur de l'application.
+                  </p>
+                </div>
               </div>
             )}
 

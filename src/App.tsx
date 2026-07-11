@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Activity, Users, Calendar, CreditCard, MessageSquare, LogOut, 
   ChevronRight, LayoutDashboard, Compass, RefreshCw, AlertCircle,
-  ShieldCheck, Settings2, ShieldAlert, X
+  ShieldCheck, Settings2, ShieldAlert, X, Brain, MessageSquareHeart,
+  User as UserIcon
 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
@@ -16,10 +17,14 @@ import Dashboard from './components/Dashboard';
 import MemberManager from './components/MemberManager';
 import EventManager from './components/EventManager';
 import FinanceManager from './components/FinanceManager';
+import StrategyAI from './components/StrategyAI';
 import Messenger from './components/Messenger';
 import MfaGate from './components/MfaGate';
 import MFASettingsModal from './components/MFASettingsModal';
 import SuperUserDashboard from './components/SuperUserDashboard';
+import SettingsManager from './components/SettingsManager';
+import FeedbackManager from './components/FeedbackManager';
+import UserProfileManager from './components/UserProfileManager';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -32,6 +37,7 @@ export default function App() {
   } | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [selectedClub, setSelectedClub] = useState<Club | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMfaVerified, setIsMfaVerified] = useState(false);
   const [isMfaSettingsOpen, setIsMfaSettingsOpen] = useState(false);
   const [hasMfaEnabled, setHasMfaEnabled] = useState(false);
@@ -225,6 +231,38 @@ export default function App() {
     }
   }, [selectedClub]);
 
+  // Listen to club settings (including dark mode) dynamically
+  useEffect(() => {
+    if (!selectedClub) {
+      setIsDarkMode(false);
+      document.documentElement.classList.remove('dark');
+      return;
+    }
+
+    const settingsDocRef = doc(db, 'clubs', selectedClub.id, 'settings', 'system');
+    const unsubscribeSettings = onSnapshot(settingsDocRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const darkSetting = !!(data?.appearance?.darkMode);
+        setIsDarkMode(darkSetting);
+        if (darkSetting) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } else {
+        setIsDarkMode(false);
+        document.documentElement.classList.remove('dark');
+      }
+    }, (error) => {
+      console.error("Error listening to club settings:", error);
+    });
+
+    return () => {
+      unsubscribeSettings();
+    };
+  }, [selectedClub]);
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -270,8 +308,16 @@ export default function App() {
     const isPending = userProfile.status === 'pending';
     const roleTranslation = {
       admin: 'Administrateur',
-      coach: 'Coach',
-      player: 'Joueur'
+      president: "Président de l'association",
+      vice_president_1: "Premier vice président de l'association",
+      vice_president_2: "Deuxième vice président de l'association",
+      sec_general: "Secrétaire Général",
+      tresorier: "Trésorier",
+      membre_actif: "Membre Actif",
+      adherent: "Adhérent",
+      player: "Joueur",
+      visiteur: "Visiteur",
+      coach: "Entraîneur"
     }[userProfile.role] || userProfile.role;
 
     return (
@@ -359,14 +405,63 @@ export default function App() {
 
   const menuItems = [
     { id: 'dashboard', label: 'Tableau de Bord', icon: LayoutDashboard },
+    { id: 'profil', label: 'Mon Profil', icon: UserIcon },
     { id: 'membres', label: 'Membres & Équipes', icon: Users },
     { id: 'calendrier', label: 'Calendrier & Matchs', icon: Calendar },
     { id: 'finances', label: 'Cotisations & Finances', icon: CreditCard },
+    { id: 'strategie', label: 'Décisions & SWOT IA', icon: Brain },
     { id: 'messagerie', label: 'Messagerie Club', icon: MessageSquare },
+    { id: 'feedback', label: 'Feedback & Idées', icon: MessageSquareHeart },
+    { id: 'parametres', label: 'Paramètres', icon: Settings2 },
   ];
   if (userProfile?.isSuperUser) {
     menuItems.push({ id: 'super_user', label: 'Super Utilisateur', icon: ShieldCheck });
   }
+
+  const currentMember = members.find(m => m.id === currentUser?.uid);
+  const userRole = currentMember?.role || userProfile?.role || 'visiteur';
+  const filteredMenuItems = menuItems.filter(item => {
+    // Admin and super user have access to everything
+    if (userRole === 'admin' || userProfile?.isSuperUser) return true;
+
+    if (item.id === 'dashboard') return true;
+    if (item.id === 'profil') return true;
+
+    if (item.id === 'membres') {
+      // Accessible to executive team: president, vice_president_1, vice_president_2, sec_general, tresorier
+      return ['president', 'vice_president_1', 'vice_president_2', 'sec_general', 'tresorier', 'admin'].includes(userRole);
+    }
+
+    if (item.id === 'calendrier') {
+      return true;
+    }
+
+    if (item.id === 'finances') {
+      // Accessible to: executive team (treasurer, president, vps, sec_general)
+      // AND adherents / players to see their own dues
+      return ['president', 'vice_president_1', 'vice_president_2', 'sec_general', 'tresorier', 'adherent', 'player', 'admin'].includes(userRole);
+    }
+
+    if (item.id === 'strategie') {
+      // SWOT IA accessible to executives
+      return ['president', 'vice_president_1', 'vice_president_2', 'sec_general', 'tresorier', 'membre_actif', 'admin'].includes(userRole);
+    }
+
+    if (item.id === 'messagerie') {
+      // Accessible to everyone except visitor
+      return userRole !== 'visiteur';
+    }
+
+    if (item.id === 'feedback') {
+      return true;
+    }
+
+    if (item.id === 'parametres') {
+      return true;
+    }
+
+    return true;
+  });
 
   return (
     <div id="hourasports-app" className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
@@ -402,7 +497,7 @@ export default function App() {
 
           {/* Main Navigation links */}
           <nav className="space-y-1.5">
-            {menuItems.map(item => {
+            {filteredMenuItems.map(item => {
               const isActive = activeTab === item.id;
               return (
                 <button
@@ -460,7 +555,7 @@ export default function App() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-w-0">
         {/* Top Header Panel */}
         <header className="px-8 py-4 bg-white border-b border-slate-200 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
@@ -556,8 +651,45 @@ export default function App() {
                   />
                 )}
 
+                {activeTab === 'strategie' && (
+                  <StrategyAI
+                    club={selectedClub}
+                    members={members}
+                    payments={payments}
+                    events={events}
+                    teams={teams}
+                  />
+                )}
+
                 {activeTab === 'super_user' && userProfile?.isSuperUser && (
                   <SuperUserDashboard />
+                )}
+
+                {activeTab === 'profil' && (
+                  <UserProfileManager 
+                    club={selectedClub}
+                    currentUser={currentUser}
+                    userProfile={userProfile}
+                    onOpenMfaSettings={() => setIsMfaSettingsOpen(true)}
+                    onRefreshClubData={fetchClubData}
+                  />
+                )}
+
+                {activeTab === 'feedback' && (
+                  <FeedbackManager 
+                    club={selectedClub}
+                    currentUser={currentUser}
+                    userProfile={userProfile}
+                  />
+                )}
+
+                {activeTab === 'parametres' && (
+                  <SettingsManager 
+                    club={selectedClub} 
+                    onRefresh={fetchClubData} 
+                    currentUserRole={userRole}
+                    isSuperUser={userProfile?.isSuperUser}
+                  />
                 )}
               </motion.div>
             </AnimatePresence>

@@ -1,0 +1,1802 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Building, Mail, UserCheck, Palette, Globe, Server, Shield, Database, 
+  Trash2, Save, RefreshCw, Play, Check, Lock, User, MapPin, Sparkles, 
+  Clock, AlertTriangle, ShieldAlert, Cpu, Eye, EyeOff, Plus, FileText, Send
+} from 'lucide-react';
+import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { Club } from '../types';
+
+interface SettingsManagerProps {
+  club: Club;
+  onRefresh: () => void;
+  currentUserRole?: string;
+  isSuperUser?: boolean;
+}
+
+interface AuditLog {
+  id: string;
+  action: string;
+  user: string;
+  ip: string;
+  timestamp: string;
+}
+
+interface BackupItem {
+  id: string;
+  filename: string;
+  size: string;
+  createdAt: string;
+  status: 'completed' | 'failed';
+}
+
+export default function SettingsManager({ club, onRefresh, currentUserRole, isSuperUser }: SettingsManagerProps) {
+  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'system' | 'danger'>('general');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+
+  // General States
+  const [associationName, setAssociationName] = useState(club.name || '');
+  const [associationSigle, setAssociationSigle] = useState('');
+  const [associationDesc, setAssociationDesc] = useState('Club de sport amateur dédié au développement des talents.');
+  const [associationYear, setAssociationYear] = useState('2018');
+  const [associationLogo, setAssociationLogo] = useState(club.logoUrl || '');
+
+  // Contact States
+  const [contactEmail, setContactEmail] = useState('contact@' + (club.name?.toLowerCase().replace(/\s+/g, '') || 'club') + '.fr');
+  const [contactPhone, setContactPhone] = useState('01 23 45 67 89');
+  const [contactAddress, setContactAddress] = useState(club.address || '12 Rue des Sports, 75000 Paris');
+  const [contactWebsite, setContactWebsite] = useState('https://www.example.com');
+  const [socialFacebook, setSocialFacebook] = useState('https://facebook.com/club');
+  const [socialTwitter, setSocialTwitter] = useState('https://twitter.com/club');
+  const [socialInstagram, setSocialInstagram] = useState('https://instagram.com/club');
+
+  // Registration States
+  const [manualValidation, setManualValidation] = useState(true);
+  const [emailConfirmation, setEmailConfirmation] = useState(true);
+  const [medicalCertRequired, setMedicalCertRequired] = useState(true);
+  const [adminCode, setAdminCode] = useState('ADMIN2026');
+  const [coachCode, setCoachCode] = useState('COACH2026');
+  const [presidentCode, setPresidentCode] = useState('PRESIDENT2026');
+  const [vicePresident1Code, setVicePresident1Code] = useState('VP12026');
+  const [vicePresident2Code, setVicePresident2Code] = useState('VP22026');
+  const [secGeneralCode, setSecGeneralCode] = useState('SG2026');
+  const [tresorierCode, setTresorierCode] = useState('TRESORIER2026');
+  const [membreActifCode, setMembreActifCode] = useState('MEMBRE2026');
+  const [adherentCode, setAdherentCode] = useState('ADHERENT2026');
+  const [playerCode, setPlayerCode] = useState('PLAYER2026');
+  const [visiteurCode, setVisiteurCode] = useState('VISITEUR2026');
+
+  // Appearance States
+  const [darkMode, setDarkMode] = useState(false);
+  const [animationsEnabled, setAnimationsEnabled] = useState(true);
+  const [particleEffects, setParticleEffects] = useState(true);
+  const [displayFont, setDisplayFont] = useState('Inter');
+
+  // Language & Region
+  const [mainLanguage, setMainLanguage] = useState('Français (FR)');
+  const [timezone, setTimezone] = useState('Europe/Paris (UTC+02:00)');
+  const [dateFormat, setDateFormat] = useState('DD/MM/YYYY');
+  const [currency, setCurrency] = useState('EUR (€)');
+  const [currencyFormat, setCurrencyFormat] = useState('1 000,00 €');
+
+  // SMTP States
+  const [smtpHost, setSmtpHost] = useState('smtp.sendgrid.net');
+  const [smtpPort, setSmtpPort] = useState('587');
+  const [smtpUser, setSmtpUser] = useState('apikey');
+  const [smtpPass, setSmtpPass] = useState('SG.example_smtp_password_key_placeholder');
+  const [smtpSecure, setSmtpSecure] = useState('tls');
+
+  // Email Templates
+  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<'welcome' | 'reminder' | 'convocation'>('welcome');
+  const [welcomeSubject, setWelcomeSubject] = useState('Bienvenue chez [Association] - Votre inscription est validée !');
+  const [welcomeBody, setWelcomeBody] = useState('Bonjour [Nom],\n\nNous avons le plaisir de vous informer que votre inscription a été validée avec succès par nos administrateurs.\n\nSportivement,\nL\'équipe [Association]');
+  const [reminderSubject, setReminderSubject] = useState('Relance : Dossier d\'inscription incomplet');
+  const [reminderBody, setReminderBody] = useState('Bonjour [Nom],\n\nVotre dossier d\'inscription est toujours incomplet (certificat médical ou charte manquante). Merci de régulariser votre situation au plus vite.\n\nSportivement,\nL\'équipe [Association]');
+  const [convocationSubject, setConvocationSubject] = useState('Convocation : [Match/Entraînement] du [Date]');
+  const [convocationBody, setConvocationBody] = useState('Bonjour [Nom],\n\nVous êtes convoqué pour participer à l\'événement "[Titre]" qui aura lieu le [Date] à [Heure].\n\nMerci de confirmer votre présence depuis votre espace membre.\n\nSportivement,\nLe coach');
+
+  // Security States
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [sessionTimeout, setSessionTimeout] = useState(120);
+  const [maxLoginAttempts, setMaxLoginAttempts] = useState(5);
+  const [csrfProtection, setCsrfProtection] = useState(true);
+  const [passwordStrength, setPasswordStrength] = useState<'medium' | 'strong' | 'very_strong'>('strong');
+
+  // Backup States
+  const [autoBackups, setAutoBackups] = useState(true);
+  const [backups, setBackups] = useState<BackupItem[]>([
+    { id: 'b1', filename: 'backup_auto_20260710_040000.sql', size: '2.4 MB', createdAt: '2026-07-10 04:00', status: 'completed' },
+    { id: 'b2', filename: 'backup_auto_20260709_040000.sql', size: '2.3 MB', createdAt: '2026-07-09 04:00', status: 'completed' },
+    { id: 'b3', filename: 'backup_manual_v1.0.sql', size: '2.1 MB', createdAt: '2026-07-05 18:24', status: 'completed' }
+  ]);
+
+  // Audit Logs
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([
+    { id: 'l1', action: 'Mise à jour des paramètres système', user: 'mass26.sm15@gmail.com', ip: '192.168.1.45', timestamp: '2026-07-11 01:10' },
+    { id: 'l2', action: 'Création d\'une équipe : U18 Masculin', user: 'mass26.sm15@gmail.com', ip: '192.168.1.45', timestamp: '2026-07-10 23:45' },
+    { id: 'l3', action: 'Validation de l\'inscription de Lucas Martin', user: 'mass26.sm15@gmail.com', ip: '192.168.1.45', timestamp: '2026-07-10 18:32' },
+    { id: 'l4', action: 'Génération de facture de cotisation #FA-492', user: 'mass26.sm15@gmail.com', ip: '192.168.1.45', timestamp: '2026-07-10 14:15' },
+    { id: 'l5', action: 'Exportation de l\'historique financier (Excel)', user: 'mass26.sm15@gmail.com', ip: '192.168.1.45', timestamp: '2026-07-09 11:02' }
+  ]);
+
+  // Mock System Usage Metrics
+  const [cpuLoad, setCpuLoad] = useState(24);
+  const [memoryUsage, setMemoryUsage] = useState(48);
+  const [storageUsage, setStorageUsage] = useState(12.8);
+
+  // Danger actions states
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [resetVerificationText, setResetVerificationText] = useState('');
+  const [cacheClearing, setCacheClearing] = useState(false);
+
+  // Load saved settings from Firestore on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      setLoading(true);
+      try {
+        const settingsDocRef = doc(db, 'clubs', club.id, 'settings', 'system');
+        const snap = await getDoc(settingsDocRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          
+          // Apply General Settings
+          if (data.association) {
+            setAssociationName(data.association.name || club.name || '');
+            setAssociationSigle(data.association.sigle || '');
+            setAssociationDesc(data.association.description || '');
+            setAssociationYear(data.association.yearCreated || '2018');
+            setAssociationLogo(data.association.logoUrl || club.logoUrl || '');
+          }
+
+          // Apply Contact Settings
+          if (data.contact) {
+            setContactEmail(data.contact.email || '');
+            setContactPhone(data.contact.phone || '');
+            setContactAddress(data.contact.address || '');
+            setContactWebsite(data.contact.website || '');
+            setSocialFacebook(data.contact.facebook || '');
+            setSocialTwitter(data.contact.twitter || '');
+            setSocialInstagram(data.contact.instagram || '');
+          }
+
+          // Apply Inscriptions Settings
+          if (data.registration) {
+            setManualValidation(data.registration.manualValidation !== false);
+            setEmailConfirmation(data.registration.emailConfirmation !== false);
+            setMedicalCertRequired(data.registration.medicalCertRequired !== false);
+            setAdminCode(data.registration.adminCode || 'ADMIN2026');
+            setCoachCode(data.registration.coachCode || 'COACH2026');
+            setPresidentCode(data.registration.presidentCode || 'PRESIDENT2026');
+            setVicePresident1Code(data.registration.vicePresident1Code || 'VP12026');
+            setVicePresident2Code(data.registration.vicePresident2Code || 'VP22026');
+            setSecGeneralCode(data.registration.secGeneralCode || 'SG2026');
+            setTresorierCode(data.registration.tresorierCode || 'TRESORIER2026');
+            setMembreActifCode(data.registration.membreActifCode || 'MEMBRE2026');
+            setAdherentCode(data.registration.adherentCode || 'ADHERENT2026');
+            setPlayerCode(data.registration.playerCode || 'PLAYER2026');
+            setVisiteurCode(data.registration.visiteurCode || 'VISITEUR2026');
+          }
+
+          // Apply Appearance Settings
+          if (data.appearance) {
+            setDarkMode(!!data.appearance.darkMode);
+            setAnimationsEnabled(data.appearance.animations !== false);
+            setParticleEffects(data.appearance.particleEffects !== false);
+            setDisplayFont(data.appearance.displayFont || 'Inter');
+            
+            setMainLanguage(data.appearance.mainLanguage || 'Français (FR)');
+            setTimezone(data.appearance.timezone || 'Europe/Paris (UTC+02:00)');
+            setDateFormat(data.appearance.dateFormat || 'DD/MM/YYYY');
+            setCurrency(data.appearance.currency || 'EUR (€)');
+            setCurrencyFormat(data.appearance.currencyFormat || '1 000,00 €');
+          }
+
+          // Apply SMTP Settings
+          if (data.smtp) {
+            setSmtpHost(data.smtp.host || 'smtp.sendgrid.net');
+            setSmtpPort(data.smtp.port || '587');
+            setSmtpUser(data.smtp.user || 'apikey');
+            setSmtpPass(data.smtp.password || '•••••••••••••••••••••••••');
+            setSmtpSecure(data.smtp.secure || 'tls');
+          }
+
+          // Apply Email Templates
+          if (data.emailTemplates) {
+            if (data.emailTemplates.welcome) {
+              setWelcomeSubject(data.emailTemplates.welcome.subject || '');
+              setWelcomeBody(data.emailTemplates.welcome.body || '');
+            }
+            if (data.emailTemplates.reminder) {
+              setReminderSubject(data.emailTemplates.reminder.subject || '');
+              setReminderBody(data.emailTemplates.reminder.body || '');
+            }
+            if (data.emailTemplates.convocation) {
+              setConvocationSubject(data.emailTemplates.convocation.subject || '');
+              setConvocationBody(data.emailTemplates.convocation.body || '');
+            }
+          }
+
+          // Apply Security
+          if (data.security) {
+            setMfaEnabled(!!data.security.mfaEnabled);
+            setSessionTimeout(data.security.sessionTimeout || 120);
+            setMaxLoginAttempts(data.security.maxLoginAttempts || 5);
+            setCsrfProtection(data.security.csrfProtection !== false);
+            setPasswordStrength(data.security.passwordStrength || 'strong');
+          }
+
+          // Apply Backups
+          if (data.backup) {
+            setAutoBackups(data.backup.autoBackups !== false);
+          }
+        }
+      } catch (err: any) {
+        console.error("Error loading system settings:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+
+    // Randomize slightly the mock metrics just for visual fidelity
+    const timer = setInterval(() => {
+      setCpuLoad(prev => Math.max(10, Math.min(85, prev + Math.floor(Math.random() * 9) - 4)));
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, [club.id]);
+
+  // General Save Action
+  const handleSaveSettings = async (section: 'general' | 'appearance' | 'system') => {
+    setSaving(true);
+    setSuccessMessage(null);
+    setErrorMessage(null);
+
+    const docData: any = {
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'mass26.sm15@gmail.com'
+    };
+
+    try {
+      const settingsDocRef = doc(db, 'clubs', club.id, 'settings', 'system');
+      const snap = await getDoc(settingsDocRef);
+      const existingData = snap.exists() ? snap.data() : {};
+
+      if (section === 'general') {
+        docData.association = {
+          name: associationName,
+          sigle: associationSigle,
+          description: associationDesc,
+          yearCreated: associationYear,
+          logoUrl: associationLogo
+        };
+        docData.contact = {
+          email: contactEmail,
+          phone: contactPhone,
+          address: contactAddress,
+          website: contactWebsite,
+          facebook: socialFacebook,
+          twitter: socialTwitter,
+          instagram: socialInstagram
+        };
+        docData.registration = {
+          manualValidation,
+          emailConfirmation,
+          medicalCertRequired,
+          adminCode,
+          coachCode,
+          presidentCode,
+          vicePresident1Code,
+          vicePresident2Code,
+          secGeneralCode,
+          tresorierCode,
+          membreActifCode,
+          adherentCode,
+          playerCode,
+          visiteurCode
+        };
+
+        // Preserve other sections
+        docData.appearance = existingData.appearance || null;
+        docData.smtp = existingData.smtp || null;
+        docData.emailTemplates = existingData.emailTemplates || null;
+        docData.security = existingData.security || null;
+        docData.backup = existingData.backup || null;
+      } else if (section === 'appearance') {
+        docData.appearance = {
+          darkMode,
+          animations: animationsEnabled,
+          particleEffects,
+          displayFont,
+          mainLanguage,
+          timezone,
+          dateFormat,
+          currency,
+          currencyFormat
+        };
+
+        // Preserve other sections
+        docData.association = existingData.association || null;
+        docData.contact = existingData.contact || null;
+        docData.registration = existingData.registration || null;
+        docData.smtp = existingData.smtp || null;
+        docData.emailTemplates = existingData.emailTemplates || null;
+        docData.security = existingData.security || null;
+        docData.backup = existingData.backup || null;
+      } else if (section === 'system') {
+        docData.smtp = {
+          host: smtpHost,
+          port: smtpPort,
+          user: smtpUser,
+          password: smtpPass,
+          secure: smtpSecure
+        };
+        docData.emailTemplates = {
+          welcome: { subject: welcomeSubject, body: welcomeBody },
+          reminder: { subject: reminderSubject, body: reminderBody },
+          convocation: { subject: convocationSubject, body: convocationBody }
+        };
+        docData.security = {
+          mfaEnabled,
+          sessionTimeout,
+          maxLoginAttempts,
+          csrfProtection,
+          passwordStrength
+        };
+        docData.backup = {
+          autoBackups
+        };
+
+        // Preserve other sections
+        docData.association = existingData.association || null;
+        docData.contact = existingData.contact || null;
+        docData.registration = existingData.registration || null;
+        docData.appearance = existingData.appearance || null;
+      }
+
+      await setDoc(settingsDocRef, docData).catch(err => {
+        handleFirestoreError(err, OperationType.WRITE, `clubs/${club.id}/settings/system`);
+        throw err;
+      });
+
+      // Update audit log
+      const newLog: AuditLog = {
+        id: 'new_' + Date.now(),
+        action: `Mis à jour: Configuration des paramètres (${section === 'general' ? 'Général' : section === 'appearance' ? 'Apparence' : 'Système'})`,
+        user: 'mass26.sm15@gmail.com',
+        ip: '192.168.1.45',
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+      };
+
+      setAuditLogs(prev => [newLog, ...prev]);
+      setSuccessMessage(`Les paramètres de la section "${section === 'general' ? 'Général' : section === 'appearance' ? 'Apparence' : 'Système'}" ont été enregistrés avec succès !`);
+      
+      // Update club name in memory if modified in current club
+      if (section === 'general' && associationName !== club.name) {
+        await setDoc(doc(db, 'clubs', club.id), {
+          ...club,
+          name: associationName,
+          logoUrl: associationLogo,
+          address: contactAddress
+        });
+        onRefresh();
+      }
+
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage("Une erreur est survenue lors de l'enregistrement : " + err.message);
+      setTimeout(() => setErrorMessage(null), 5000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Danger actions
+  const handleClearCache = () => {
+    setCacheClearing(true);
+    setSuccessMessage(null);
+    setErrorMessage(null);
+
+    setTimeout(() => {
+      setCacheClearing(false);
+      setSuccessMessage("Le cache du système a été entièrement vidé et reconstruit (32 MB libérés).");
+      
+      const newLog: AuditLog = {
+        id: 'new_' + Date.now(),
+        action: "Purge manuelle du cache applicatif",
+        user: 'mass26.sm15@gmail.com',
+        ip: '192.168.1.45',
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+      };
+      setAuditLogs(prev => [newLog, ...prev]);
+
+      setTimeout(() => setSuccessMessage(null), 4000);
+    }, 1500);
+  };
+
+  // Full database purge/reset
+  const handleCompleteDatabaseReset = async () => {
+    if (resetVerificationText.toLowerCase().trim() !== 'supprimer tout') {
+      alert("Veuillez saisir exactement 'supprimer tout' pour confirmer.");
+      return;
+    }
+
+    setSaving(true);
+    setSuccessMessage(null);
+    setErrorMessage(null);
+    setConfirmResetOpen(false);
+
+    try {
+      // 1. Delete events
+      const eventsSnap = await getDocs(collection(db, 'clubs', club.id, 'events'));
+      const eventBatch = writeBatch(db);
+      eventsSnap.forEach(docSnap => {
+        eventBatch.delete(docSnap.ref);
+      });
+      await eventBatch.commit();
+
+      // 2. Delete teams
+      const teamsSnap = await getDocs(collection(db, 'clubs', club.id, 'teams'));
+      const teamBatch = writeBatch(db);
+      teamsSnap.forEach(docSnap => {
+        teamBatch.delete(docSnap.ref);
+      });
+      await teamBatch.commit();
+
+      // 3. Delete members (keeping only the admin member)
+      const membersSnap = await getDocs(collection(db, 'clubs', club.id, 'members'));
+      const memberBatch = writeBatch(db);
+      membersSnap.forEach(docSnap => {
+        // Keep current authenticated user
+        if (docSnap.id !== 'mass26.sm15@gmail.com') {
+          memberBatch.delete(docSnap.ref);
+        }
+      });
+      await memberBatch.commit();
+
+      // 4. Delete payments
+      const paymentsSnap = await getDocs(collection(db, 'clubs', club.id, 'payments'));
+      const paymentBatch = writeBatch(db);
+      paymentsSnap.forEach(docSnap => {
+        paymentBatch.delete(docSnap.ref);
+      });
+      await paymentBatch.commit();
+
+      // 5. Delete expenses
+      const expensesSnap = await getDocs(collection(db, 'clubs', club.id, 'expenses'));
+      const expenseBatch = writeBatch(db);
+      expensesSnap.forEach(docSnap => {
+        expenseBatch.delete(docSnap.ref);
+      });
+      await expenseBatch.commit();
+
+      // Update Audit Logs
+      const resetLog: AuditLog = {
+        id: 'new_' + Date.now(),
+        action: "RÉINITIALISATION GLOBALE DE LA BASE DE DONNÉES",
+        user: 'mass26.sm15@gmail.com',
+        ip: '192.168.1.45',
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+      };
+      setAuditLogs([resetLog]);
+      setSuccessMessage("La base de données du club a été entièrement réinitialisée. Seul votre profil Administrateur a été conservé.");
+      setResetVerificationText('');
+      
+      onRefresh();
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage("Une erreur est survenue pendant la réinitialisation : " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Trigger manual backup simulation
+  const handleTriggerBackup = () => {
+    const backupId = 'b_new_' + Date.now();
+    const newBackup: BackupItem = {
+      id: backupId,
+      filename: `backup_manual_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}_${Date.now().toString().slice(-4)}.sql`,
+      size: `${(Math.random() * 1.5 + 1.5).toFixed(1)} MB`,
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      status: 'completed'
+    };
+
+    setBackups(prev => [newBackup, ...prev]);
+    setSuccessMessage("Sauvegarde de la base de données créée avec succès.");
+    
+    const newLog: AuditLog = {
+      id: 'l_back_' + Date.now(),
+      action: "Création manuelle d'une sauvegarde complète",
+      user: 'mass26.sm15@gmail.com',
+      ip: '192.168.1.45',
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+
+    setTimeout(() => setSuccessMessage(null), 3000);
+  };
+
+  const isAllowedToManageCodes = currentUserRole === 'admin' || isSuperUser;
+
+  return (
+    <div className="space-y-6">
+      {/* Title section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <Server className="w-6 h-6 text-emerald-600" />
+            Paramètres Système
+          </h2>
+          <p className="text-sm text-slate-500">Configuration générale et administration de votre application HouraSports.</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-400 font-mono bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+          <Clock className="w-3.5 h-3.5 text-slate-400" />
+          <span>Dernier enregistrement : {new Date().toLocaleDateString('fr-FR')}</span>
+        </div>
+      </div>
+
+      {/* Alert Messaging */}
+      {successMessage && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-semibold rounded-xl flex items-center gap-3 shadow-sm animate-fadeIn">
+          <Check className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>{successMessage}</span>
+        </div>
+      )}
+      {errorMessage && (
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold rounded-xl flex items-center gap-3 shadow-sm animate-fadeIn">
+          <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {/* Main Grid: Sidebar vs Content Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        
+        {/* Settings Sub-navigation Left Sidebar */}
+        <div className="lg:col-span-1 flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 shrink-0">
+          <button
+            onClick={() => setActiveTab('general')}
+            className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl text-xs md:text-sm font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
+              activeTab === 'general' 
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/10' 
+                : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 shadow-sm'
+            }`}
+          >
+            <Building className="w-4 h-4 shrink-0" />
+            <span>Général</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('appearance')}
+            className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl text-xs md:text-sm font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
+              activeTab === 'appearance' 
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/10' 
+                : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 shadow-sm'
+            }`}
+          >
+            <Palette className="w-4 h-4 shrink-0" />
+            <span>Apparence</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('system')}
+            className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl text-xs md:text-sm font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
+              activeTab === 'system' 
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/10' 
+                : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 shadow-sm'
+            }`}
+          >
+            <Server className="w-4 h-4 shrink-0" />
+            <span>Système & SMTP</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('danger')}
+            className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl text-xs md:text-sm font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
+              activeTab === 'danger' 
+                ? 'bg-rose-600 text-white shadow-md shadow-rose-600/10' 
+                : 'bg-white text-rose-600 hover:text-rose-900 hover:bg-rose-50 border border-slate-200 shadow-sm'
+            }`}
+          >
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>Zone Danger</span>
+          </button>
+        </div>
+
+        {/* Content Box */}
+        <div className="lg:col-span-3 space-y-6">
+          
+          {loading ? (
+            <div className="h-96 bg-white rounded-2xl border border-slate-200 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin" />
+                <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Chargement des paramètres...</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* TAB 1: GENERAL */}
+              {activeTab === 'general' && (
+                <div className="space-y-6 animate-fadeIn">
+                  
+                  {/* Card 1: Association Info */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                      <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                        <Building className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Association : Informations de l'Association</h3>
+                        <p className="text-[10px] text-slate-400">Renseignez l'identité légale et historique de votre club.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Nom de l'Association</label>
+                        <input
+                          type="text"
+                          value={associationName}
+                          onChange={(e) => setAssociationName(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 font-semibold"
+                          placeholder="Ex: Football Club de Paris"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Sigle / Acronyme</label>
+                        <input
+                          type="text"
+                          value={associationSigle}
+                          onChange={(e) => setAssociationSigle(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 font-semibold"
+                          placeholder="Ex: FCP"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1 md:col-span-2">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Description de l'association</label>
+                        <textarea
+                          rows={3}
+                          value={associationDesc}
+                          onChange={(e) => setAssociationDesc(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                          placeholder="Décrivez l'association en quelques mots..."
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Année de création</label>
+                        <input
+                          type="number"
+                          value={associationYear}
+                          onChange={(e) => setAssociationYear(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 font-semibold"
+                          placeholder="Ex: 2018"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">URL du logo du club</label>
+                        <input
+                          type="text"
+                          value={associationLogo}
+                          onChange={(e) => setAssociationLogo(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                          placeholder="Ex: https://image.url/logo.png"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Contact & Social Info */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                      <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Contact & Réseau : Coordonnées</h3>
+                        <p className="text-[10px] text-slate-400">Gérez les coordonnées publiques du club et les réseaux sociaux.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Email de Contact</label>
+                        <input
+                          type="email"
+                          value={contactEmail}
+                          onChange={(e) => setContactEmail(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Téléphone</label>
+                        <input
+                          type="text"
+                          value={contactPhone}
+                          onChange={(e) => setContactPhone(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1 md:col-span-2">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Adresse Postale</label>
+                        <input
+                          type="text"
+                          value={contactAddress}
+                          onChange={(e) => setContactAddress(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Site Web Officiel</label>
+                        <input
+                          type="url"
+                          value={contactWebsite}
+                          onChange={(e) => setContactWebsite(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Facebook URL</label>
+                        <input
+                          type="text"
+                          value={socialFacebook}
+                          onChange={(e) => setSocialFacebook(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Twitter / X URL</label>
+                        <input
+                          type="text"
+                          value={socialTwitter}
+                          onChange={(e) => setSocialTwitter(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Instagram URL</label>
+                        <input
+                          type="text"
+                          value={socialInstagram}
+                          onChange={(e) => setSocialInstagram(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Inscriptions Parameters */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                      <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                        <UserCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Inscriptions : Paramètres d'Inscription</h3>
+                        <p className="text-[10px] text-slate-400">Configurez les workflows de validation pour les nouveaux inscrits.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 space-y-4">
+                      {/* Checkbox settings */}
+                      <div className="space-y-3">
+                        <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition">
+                          <input
+                            type="checkbox"
+                            checked={manualValidation}
+                            onChange={(e) => setManualValidation(e.target.checked)}
+                            className="mt-1 w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="block font-bold text-sm text-slate-900">Validation manuelle des comptes</span>
+                            <span className="block text-[11px] text-slate-500">Un administrateur doit approuver manuellement chaque nouveau compte avant de donner l'accès.</span>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition">
+                          <input
+                            type="checkbox"
+                            checked={emailConfirmation}
+                            onChange={(e) => setEmailConfirmation(e.target.checked)}
+                            className="mt-1 w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="block font-bold text-sm text-slate-900">Email de confirmation requis</span>
+                            <span className="block text-[11px] text-slate-500">Les utilisateurs doivent vérifier leur adresse e-mail avant de soumettre leur inscription.</span>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition">
+                          <input
+                            type="checkbox"
+                            checked={medicalCertRequired}
+                            onChange={(e) => setMedicalCertRequired(e.target.checked)}
+                            className="mt-1 w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="block font-bold text-sm text-slate-900">Certificat médical obligatoire</span>
+                            <span className="block text-[11px] text-slate-500">Le dépôt d'un certificat médical valide est requis à l'Étape 2 pour finaliser l'inscription.</span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Access codes inputs */}
+                      <div className="border-t border-slate-100 pt-5">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Lock className="w-4 h-4 text-emerald-600" />
+                          <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Codes d'inscription par profil</h4>
+                        </div>
+                        
+                        {isAllowedToManageCodes ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Administrateur</label>
+                              <input
+                                type="text"
+                                value={adminCode}
+                                onChange={(e) => setAdminCode(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="ADMIN2026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Président</label>
+                              <input
+                                type="text"
+                                value={presidentCode}
+                                onChange={(e) => setPresidentCode(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="PRESIDENT2026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Vice-Président 1</label>
+                              <input
+                                type="text"
+                                value={vicePresident1Code}
+                                onChange={(e) => setVicePresident1Code(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="VP12026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Vice-Président 2</label>
+                              <input
+                                type="text"
+                                value={vicePresident2Code}
+                                onChange={(e) => setVicePresident2Code(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="VP22026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Secrétaire Général</label>
+                              <input
+                                type="text"
+                                value={secGeneralCode}
+                                onChange={(e) => setSecGeneralCode(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="SG2026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Trésorier</label>
+                              <input
+                                type="text"
+                                value={tresorierCode}
+                                onChange={(e) => setTresorierCode(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="TRESORIER2026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Membre Actif</label>
+                              <input
+                                type="text"
+                                value={membreActifCode}
+                                onChange={(e) => setMembreActifCode(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="MEMBRE2026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Coach / Entraîneur</label>
+                              <input
+                                type="text"
+                                value={coachCode}
+                                onChange={(e) => setCoachCode(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="COACH2026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Adhérent standard</label>
+                              <input
+                                type="text"
+                                value={adherentCode}
+                                onChange={(e) => setAdherentCode(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="ADHERENT2026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Joueur / Athlète</label>
+                              <input
+                                type="text"
+                                value={playerCode}
+                                onChange={(e) => setPlayerCode(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="PLAYER2026"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Visiteur simple</label>
+                              <input
+                                type="text"
+                                value={visiteurCode}
+                                onChange={(e) => setVisiteurCode(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500 font-semibold"
+                                placeholder="VISITEUR2026"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-150 flex items-start gap-3 text-slate-500">
+                            <Lock className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
+                            <div className="text-xs">
+                              <p className="font-bold text-slate-700">Section Restreinte</p>
+                              <p className="text-slate-400 mt-0.5">Seuls les rôles <strong>Super Utilisateur</strong> et <strong>Administrateur</strong> peuvent visualiser et éditer les codes de sécurité requis pour la création des profils.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save button bottom */}
+                  <div className="flex justify-end bg-slate-50 p-4 border border-slate-200 rounded-2xl shadow-sm">
+                    <button
+                      onClick={() => handleSaveSettings('general')}
+                      disabled={saving}
+                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-xl transition text-sm cursor-pointer disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>Enregistrer la section Général</span>
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
+              {/* TAB 2: APPEARANCE */}
+              {activeTab === 'appearance' && (
+                <div className="space-y-6 animate-fadeIn">
+                  
+                  {/* Card 1: Themes & Colors */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                      <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                        <Palette className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Thèmes & Couleurs : Apparence Générale</h3>
+                        <p className="text-[10px] text-slate-400">Configurez l'interface visuelle et le rendu esthétique global.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        
+                        <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition">
+                          <input
+                            type="checkbox"
+                            checked={darkMode}
+                            onChange={(e) => setDarkMode(e.target.checked)}
+                            className="mt-1 w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="block font-bold text-sm text-slate-900">Mode sombre (défaut)</span>
+                            <span className="block text-[11px] text-slate-500">Forcer l'affichage de l'application en mode sombre par défaut pour tous les adhérents.</span>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition">
+                          <input
+                            type="checkbox"
+                            checked={animationsEnabled}
+                            onChange={(e) => setAnimationsEnabled(e.target.checked)}
+                            className="mt-1 w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="block font-bold text-sm text-slate-900">Animations et transitions</span>
+                            <span className="block text-[11px] text-slate-500">Activer les animations fluides et les effets de chargement inter-onglets.</span>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition">
+                          <input
+                            type="checkbox"
+                            checked={particleEffects}
+                            onChange={(e) => setParticleEffects(e.target.checked)}
+                            className="mt-1 w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="block font-bold text-sm text-slate-900">Effets de particules (hero)</span>
+                            <span className="block text-[11px] text-slate-500">Afficher des micro-effets de particules sur l'écran d'accueil du portail d'adhésion.</span>
+                          </div>
+                        </label>
+
+                        <div className="space-y-1.5 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block">Police d'affichage</label>
+                          <select
+                            value={displayFont}
+                            onChange={(e) => setDisplayFont(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:outline-none"
+                          >
+                            <option value="Inter">Inter (Sans-serif Moderne)</option>
+                            <option value="Space Grotesk">Space Grotesk (Tech & Brutaliste)</option>
+                            <option value="Outfit">Outfit (Moderne & Rond)</option>
+                            <option value="JetBrains Mono">JetBrains Mono (Sensation Code)</option>
+                          </select>
+                          <span className="block text-[9px] text-slate-400">Police de caractères principale du tableau de bord.</span>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Language & Region */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                      <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                        <Globe className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Langue & Région</h3>
+                        <p className="text-[10px] text-slate-400">Configurez la langue, la devise et les formats de date de l'application.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Langue principale du site</label>
+                        <select
+                          value={mainLanguage}
+                          onChange={(e) => setMainLanguage(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"
+                        >
+                          <option value="Français (FR)">Français (FR)</option>
+                          <option value="English (US)">English (US)</option>
+                          <option value="Español (ES)">Español (ES)</option>
+                          <option value="Deutsch (DE)">Deutsch (DE)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Fuseau horaire</label>
+                        <select
+                          value={timezone}
+                          onChange={(e) => setTimezone(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"
+                        >
+                          <option value="Europe/Paris (UTC+02:00)">Europe/Paris (UTC+02:00)</option>
+                          <option value="Europe/London (UTC+01:00)">Europe/London (UTC+01:00)</option>
+                          <option value="UTC (UTC+00:00)">UTC (UTC+00:00)</option>
+                          <option value="America/New_York (UTC-04:00)">America/New_York (UTC-04:00)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Format de date</label>
+                        <select
+                          value={dateFormat}
+                          onChange={(e) => setDateFormat(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"
+                        >
+                          <option value="DD/MM/YYYY">DD/MM/YYYY (31/12/2026)</option>
+                          <option value="YYYY-MM-DD">YYYY-MM-DD (2026-12-31)</option>
+                          <option value="MM/DD/YYYY">MM/DD/YYYY (12/31/2026)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Devise</label>
+                        <select
+                          value={currency}
+                          onChange={(e) => setCurrency(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none font-bold"
+                        >
+                          <option value="EUR (€)">Euro (€)</option>
+                          <option value="USD ($)">US Dollar ($)</option>
+                          <option value="CHF (CHF)">Franc Suisse (CHF)</option>
+                          <option value="GBP (£)">Livre Sterling (£)</option>
+                          <option value="Da">Da</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5 col-span-1 md:col-span-2">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Format monétaire</label>
+                        <select
+                          value={currencyFormat}
+                          onChange={(e) => setCurrencyFormat(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none font-mono"
+                        >
+                          <option value="1 000,00 €">1 000,00 € (Espace de séparation, Virgule pour décimale)</option>
+                          <option value="1,000.00 €">1,000.00 € (Virgule pour milliers, Point pour décimale)</option>
+                          <option value="1000.00 €">1000.00 € (Sans séparateur de milliers, Point décimal)</option>
+                        </select>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* Save button bottom */}
+                  <div className="flex justify-end bg-slate-50 p-4 border border-slate-200 rounded-2xl shadow-sm">
+                    <button
+                      onClick={() => handleSaveSettings('appearance')}
+                      disabled={saving}
+                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-xl transition text-sm cursor-pointer disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>Enregistrer la section Apparence</span>
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
+              {/* TAB 3: SYSTEM & SMTP */}
+              {activeTab === 'system' && (
+                <div className="space-y-6 animate-fadeIn">
+                  
+                  {/* Card 1: Email & SMTP Configuration */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                      <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                        <Server className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Email & SMTP : Configuration SMTP</h3>
+                        <p className="text-[10px] text-slate-400">Configurez votre propre relais SMTP pour les notifications d'emails automatisées.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-6 gap-4">
+                      
+                      <div className="space-y-1.5 md:col-span-4">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Serveur d'expédition SMTP</label>
+                        <input
+                          type="text"
+                          value={smtpHost}
+                          onChange={(e) => setSmtpHost(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"
+                          placeholder="Ex: smtp.sendgrid.net ou mail.club.com"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Port SMTP</label>
+                        <input
+                          type="text"
+                          value={smtpPort}
+                          onChange={(e) => setSmtpPort(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none font-mono"
+                          placeholder="587"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 md:col-span-3">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Identifiant / Utilisateur</label>
+                        <input
+                          type="text"
+                          value={smtpUser}
+                          onChange={(e) => setSmtpUser(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"
+                          placeholder="Ex: apikey"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 md:col-span-3 relative">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block">Mot de passe SMTP</label>
+                        <div className="relative">
+                          <input
+                            type={showSmtpPassword ? "text" : "password"}
+                            value={smtpPass}
+                            onChange={(e) => setSmtpPass(e.target.value)}
+                            className="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            {showSmtpPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 md:col-span-6">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block">Sécurité</label>
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                            <input
+                              type="radio"
+                              name="smtp_secure"
+                              checked={smtpSecure === 'tls'}
+                              onChange={() => setSmtpSecure('tls')}
+                              className="text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span>TLS (Recommandé - Port 587)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                            <input
+                              type="radio"
+                              name="smtp_secure"
+                              checked={smtpSecure === 'ssl'}
+                              onChange={() => setSmtpSecure('ssl')}
+                              className="text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span>SSL (Chiffré - Port 465)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                            <input
+                              type="radio"
+                              name="smtp_secure"
+                              checked={smtpSecure === 'none'}
+                              onChange={() => setSmtpSecure('none')}
+                              className="text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span>Aucune (Non sécurisé - Port 25)</span>
+                          </label>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Sub-Card 1.1: Email Templates editing */}
+                    <div className="border-t border-slate-100 p-6 bg-slate-50/20">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Modèles d'Emails Automatisés</h4>
+                          <p className="text-[10px] text-slate-400">Modifiez le contenu des emails envoyés par la plateforme.</p>
+                        </div>
+                        <div className="flex gap-1.5 bg-slate-100 p-1 rounded-lg">
+                          <button
+                            onClick={() => setSelectedEmailTemplate('welcome')}
+                            className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition cursor-pointer ${selectedEmailTemplate === 'welcome' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                          >
+                            Inscription Validée
+                          </button>
+                          <button
+                            onClick={() => setSelectedEmailTemplate('reminder')}
+                            className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition cursor-pointer ${selectedEmailTemplate === 'reminder' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                          >
+                            Relance Dossier
+                          </button>
+                          <button
+                            onClick={() => setSelectedEmailTemplate('convocation')}
+                            className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition cursor-pointer ${selectedEmailTemplate === 'convocation' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                          >
+                            Convocation Match
+                          </button>
+                        </div>
+                      </div>
+
+                      {selectedEmailTemplate === 'welcome' && (
+                        <div className="space-y-3 animate-fadeIn">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase">Sujet de l'Email</label>
+                            <input
+                              type="text"
+                              value={welcomeSubject}
+                              onChange={(e) => setWelcomeSubject(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase">Corps du Message (HTML / Texte brut)</label>
+                            <textarea
+                              rows={4}
+                              value={welcomeBody}
+                              onChange={(e) => setWelcomeBody(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-emerald-500"
+                            />
+                            <p className="text-[9px] text-slate-400">Tags disponibles: <code className="bg-slate-100 px-1 py-0.5 rounded">[Nom]</code>, <code className="bg-slate-100 px-1 py-0.5 rounded">[Association]</code></p>
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedEmailTemplate === 'reminder' && (
+                        <div className="space-y-3 animate-fadeIn">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase">Sujet de l'Email</label>
+                            <input
+                              type="text"
+                              value={reminderSubject}
+                              onChange={(e) => setReminderSubject(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase">Corps du Message</label>
+                            <textarea
+                              rows={4}
+                              value={reminderBody}
+                              onChange={(e) => setReminderBody(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:outline-none"
+                            />
+                            <p className="text-[9px] text-slate-400">Tags disponibles: <code className="bg-slate-100 px-1 py-0.5 rounded">[Nom]</code>, <code className="bg-slate-100 px-1 py-0.5 rounded">[Association]</code></p>
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedEmailTemplate === 'convocation' && (
+                        <div className="space-y-3 animate-fadeIn">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase">Sujet de l'Email</label>
+                            <input
+                              type="text"
+                              value={convocationSubject}
+                              onChange={(e) => setConvocationSubject(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase">Corps du Message</label>
+                            <textarea
+                              rows={4}
+                              value={convocationBody}
+                              onChange={(e) => setConvocationBody(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:outline-none"
+                            />
+                            <p className="text-[9px] text-slate-400">Tags disponibles: <code className="bg-slate-100 px-1 py-0.5 rounded">[Nom]</code>, <code className="bg-slate-100 px-1 py-0.5 rounded">[Titre]</code>, <code className="bg-slate-100 px-1 py-0.5 rounded">[Date]</code></p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card 2: Security & Session Limits */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                      <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                        <Shield className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Sécurité : Paramètres d'Accès & MFA</h3>
+                        <p className="text-[10px] text-slate-400">Configurez les politiques de mot de passe, authentification MFA et d'audit.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      
+                      <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition">
+                        <input
+                          type="checkbox"
+                          checked={mfaEnabled}
+                          onChange={(e) => setMfaEnabled(e.target.checked)}
+                          className="mt-1 w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                        />
+                        <div>
+                          <span className="block font-bold text-sm text-slate-900">Double authentification obligatoire (2MFA)</span>
+                          <span className="block text-[11px] text-slate-500">Exiger la double authentification par SMS/Code pour l'ensemble des administrateurs et coachs.</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition">
+                        <input
+                          type="checkbox"
+                          checked={csrfProtection}
+                          onChange={(e) => setCsrfProtection(e.target.checked)}
+                          className="mt-1 w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                        />
+                        <div>
+                          <span className="block font-bold text-sm text-slate-900">Protection CSRF & Injection</span>
+                          <span className="block text-[11px] text-slate-500">Injecter des jetons de sécurité supplémentaires dans les formulaires publics de saisie de données.</span>
+                        </div>
+                      </label>
+
+                      <div className="space-y-1.5 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block">Durée maximale de session</label>
+                        <select
+                          value={sessionTimeout}
+                          onChange={(e) => setSessionTimeout(Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:outline-none"
+                        >
+                          <option value="15">15 minutes d'inactivité</option>
+                          <option value="60">60 minutes d'inactivité</option>
+                          <option value="120">120 minutes d'inactivité</option>
+                          <option value="480">8 heures (1 journée de travail)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block">Tentatives de connexion max</label>
+                        <select
+                          value={maxLoginAttempts}
+                          onChange={(e) => setMaxLoginAttempts(Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:outline-none"
+                        >
+                          <option value="3">3 tentatives (Ultra-sécurisé)</option>
+                          <option value="5">5 tentatives (Recommandé)</option>
+                          <option value="10">10 tentatives (Souple)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5 p-3 bg-slate-50 rounded-xl border border-slate-100 md:col-span-2">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block">Complexité minimale du mot de passe</label>
+                        <div className="flex gap-4 mt-2">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                            <input
+                              type="radio"
+                              name="pwd_strength"
+                              checked={passwordStrength === 'medium'}
+                              onChange={() => setPasswordStrength('medium')}
+                              className="text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span>Moyen (8 caractères)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                            <input
+                              type="radio"
+                              name="pwd_strength"
+                              checked={passwordStrength === 'strong'}
+                              onChange={() => setPasswordStrength('strong')}
+                              className="text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span>Fort (10 car. + chiffres + spéciaux)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                            <input
+                              type="radio"
+                              name="pwd_strength"
+                              checked={passwordStrength === 'very_strong'}
+                              onChange={() => setPasswordStrength('very_strong')}
+                              className="text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span>Très Fort (12 car. + maj + spéciaux)</span>
+                          </label>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Sub-Card 2.1: Audit Log list (Journal d'audit) */}
+                    <div className="border-t border-slate-100 p-6 bg-slate-50/20">
+                      <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider mb-3">Journal d'Audit Système</h4>
+                      <p className="text-[10px] text-slate-400 mb-4">Traces et historique récent des opérations de sécurité des administrateurs.</p>
+                      
+                      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                              <th className="p-3 font-bold text-slate-600">Action / Événement</th>
+                              <th className="p-3 font-bold text-slate-600">Opérateur</th>
+                              <th className="p-3 font-bold text-slate-600">Adresse IP</th>
+                              <th className="p-3 font-bold text-slate-600 text-right">Horodatage</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                            {auditLogs.map((log) => (
+                              <tr key={log.id} className="hover:bg-slate-50/50">
+                                <td className="p-3 flex items-center gap-2">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${log.action.includes('RÉINITIALISATION') ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`}></span>
+                                  <span>{log.action}</span>
+                                </td>
+                                <td className="p-3 font-mono text-[11px]">{log.user}</td>
+                                <td className="p-3 font-mono text-[11px] text-slate-400">{log.ip}</td>
+                                <td className="p-3 text-slate-400 text-right">{log.timestamp}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Backups & System Usage (Sauvegardes) */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                      <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                        <Database className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Sauvegardes : Gestion des Backups</h3>
+                        <p className="text-[10px] text-slate-400">Automatisez et gérez les exports réguliers de votre base de données.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 space-y-6">
+                      
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div>
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={autoBackups}
+                              onChange={(e) => setAutoBackups(e.target.checked)}
+                              className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                            />
+                            <span className="font-bold text-sm text-slate-900">Sauvegardes Automatiques Actives</span>
+                          </label>
+                          <span className="block text-[11px] text-slate-500 ml-7 mt-1">Crée automatiquement un point de restauration chaque jour à 04:00 (Fichiers conservés 30 jours).</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleTriggerBackup}
+                          className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-4 py-2 rounded-xl text-xs transition cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Créer sauvegarde manuelle
+                        </button>
+                      </div>
+
+                      {/* Backup History table */}
+                      <div className="space-y-2">
+                        <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Historique des Sauvegardes</h4>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200">
+                                <th className="p-3 font-bold text-slate-600">Nom du fichier</th>
+                                <th className="p-3 font-bold text-slate-600">Taille</th>
+                                <th className="p-3 font-bold text-slate-600">Date de création</th>
+                                <th className="p-3 font-bold text-slate-600">Statut</th>
+                                <th className="p-3 font-bold text-slate-600 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                              {backups.map((bk) => (
+                                <tr key={bk.id} className="hover:bg-slate-50/50">
+                                  <td className="p-3 font-mono text-emerald-700">{bk.filename}</td>
+                                  <td className="p-3 text-slate-500">{bk.size}</td>
+                                  <td className="p-3 text-slate-500">{bk.createdAt}</td>
+                                  <td className="p-3">
+                                    <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full text-[10px]">
+                                      <Check className="w-3 h-3" /> Terminé
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-right">
+                                    <button 
+                                      className="text-xs font-bold text-emerald-600 hover:text-emerald-800 transition cursor-pointer mr-3"
+                                      onClick={() => alert(`Téléchargement de ${bk.filename} démarré.`)}
+                                    >
+                                      Télécharger
+                                    </button>
+                                    <button 
+                                      className="text-xs font-bold text-rose-500 hover:text-rose-700 transition cursor-pointer"
+                                      onClick={() => {
+                                        if(confirm("Confirmez-vous la suppression de cette sauvegarde ?")) {
+                                          setBackups(prev => prev.filter(b => b.id !== bk.id));
+                                        }
+                                      }}
+                                    >
+                                      Supprimer
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Utilisation Système metrics visualizer */}
+                      <div className="space-y-3 border-t border-slate-100 pt-6">
+                        <div className="flex items-center gap-2">
+                          <Cpu className="w-4 h-4 text-emerald-600" />
+                          <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Utilisation Système en temps réel</h4>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          
+                          {/* CPU Load Gauge */}
+                          <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl flex flex-col justify-between">
+                            <span className="text-xs text-slate-400 font-bold">Charge CPU Serveur</span>
+                            <div className="flex justify-between items-baseline mt-4">
+                              <span className="text-3xl font-black text-slate-900 font-mono">{cpuLoad}%</span>
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Stable</span>
+                            </div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-3">
+                              <div className="bg-emerald-500 h-full rounded-full transition-all duration-1000" style={{ width: `${cpuLoad}%` }}></div>
+                            </div>
+                          </div>
+
+                          {/* Memory Gauge */}
+                          <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl flex flex-col justify-between">
+                            <span className="text-xs text-slate-400 font-bold">Mémoire vive (RAM)</span>
+                            <div className="flex justify-between items-baseline mt-4">
+                              <span className="text-3xl font-black text-slate-900 font-mono">{memoryUsage}%</span>
+                              <span className="text-[10px] font-bold text-slate-400">482 MB / 1 GB</span>
+                            </div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-3">
+                              <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${memoryUsage}%` }}></div>
+                            </div>
+                          </div>
+
+                          {/* Storage Gauge */}
+                          <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl flex flex-col justify-between">
+                            <span className="text-xs text-slate-400 font-bold">Espace Disque Utilisé</span>
+                            <div className="flex justify-between items-baseline mt-4">
+                              <span className="text-3xl font-black text-slate-900 font-mono">{storageUsage}%</span>
+                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">1.28 GB / 10 GB</span>
+                            </div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-3">
+                              <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${storageUsage}%` }}></div>
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* Save button bottom */}
+                  <div className="flex justify-end bg-slate-50 p-4 border border-slate-200 rounded-2xl shadow-sm">
+                    <button
+                      onClick={() => handleSaveSettings('system')}
+                      disabled={saving}
+                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-xl transition text-sm cursor-pointer disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>Enregistrer la section Système</span>
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
+              {/* TAB 4: DANGER ZONE */}
+              {activeTab === 'danger' && (
+                <div className="space-y-6 animate-fadeIn">
+                  
+                  {/* Danger Zone Actions Container */}
+                  <div className="bg-white rounded-2xl border border-rose-200 shadow-md overflow-hidden">
+                    <div className="p-6 border-b border-rose-100 flex items-center gap-3 bg-rose-50/40">
+                      <div className="w-8 h-8 bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center">
+                        <AlertTriangle className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-rose-900 text-sm uppercase tracking-wider">Zone de Danger : Actions Irréversibles</h3>
+                        <p className="text-[10px] text-rose-500 font-semibold">Prenez garde, ces outils peuvent détruire des données définitivement ou bloquer les accès.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 space-y-6 divide-y divide-slate-100">
+                      
+                      {/* Sub-action 1: Clear System Cache */}
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6">
+                        <div className="space-y-1">
+                          <span className="block font-bold text-slate-900 text-sm">Vider le cache système</span>
+                          <span className="block text-xs text-slate-500 leading-normal max-w-xl">
+                            Vide les données temporaires, images de profils et statistiques d'analyse IA mises en cache.
+                            Cette action libère de la mémoire et ré-interroge la base de données en direct au prochain rafraîchissement.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearCache}
+                          disabled={cacheClearing}
+                          className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 hover:text-slate-900 font-bold px-5 py-2.5 rounded-xl text-xs transition cursor-pointer whitespace-nowrap disabled:opacity-50 shrink-0"
+                        >
+                          {cacheClearing ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5 text-slate-500" />
+                          )}
+                          <span>Vider le cache système</span>
+                        </button>
+                      </div>
+
+                      {/* Sub-action 2: Complete Purge / Database Reset */}
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pt-6">
+                        <div className="space-y-1">
+                          <span className="block font-bold text-slate-900 text-sm text-rose-600">Réinitialisation complète de la base de données</span>
+                          <span className="block text-xs text-slate-500 leading-normal max-w-xl">
+                            Détruit l'intégralité des membres (sauf votre profil admin), des équipes, des convocations, des matchs,
+                            des dépenses et des historiques de cotisations. Cette action est <strong className="text-rose-600">définitive et totalement irréversible</strong>.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmResetOpen(true)}
+                          className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 font-bold px-5 py-2.5 border border-rose-200 rounded-xl text-xs transition cursor-pointer whitespace-nowrap shrink-0"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          <span>Réinitialiser la base de données</span>
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* RESET DANGER WARNING MODAL DIALOG */}
+                  {confirmResetOpen && (
+                    <div className="fixed inset-0 bg-slate-950/65 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fadeIn">
+                      <div className="max-w-md w-full bg-white border border-rose-200 rounded-2xl p-6 shadow-2xl space-y-4">
+                        <div className="flex items-center gap-3 text-rose-600 border-b border-rose-50 pb-3">
+                          <AlertTriangle className="w-8 h-8 animate-bounce shrink-0" />
+                          <div>
+                            <h4 className="font-extrabold text-base tracking-tight text-slate-900">Confirmer la réinitialisation complète</h4>
+                            <p className="text-[10px] text-slate-400">Cette action va détruire l'ensemble des données du club.</p>
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Vous êtes sur le point de supprimer de manière irrévocable l'intégralité des membres d'équipe, 
+                          calendriers, cotisations et informations financières liés à ce club d'HouraSports.
+                        </p>
+                        
+                        <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-800 text-[11px] leading-relaxed">
+                          <strong>Note de sécurité :</strong> Seul le compte d'administrateur avec lequel vous êtes actuellement connecté (<code className="bg-white px-1 py-0.5 rounded">mass26.sm15@gmail.com</code>) sera épargné pour éviter de vous bloquer l'accès.
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">
+                            Saisissez <strong className="text-rose-600">supprimer tout</strong> pour confirmer :
+                          </label>
+                          <input
+                            type="text"
+                            value={resetVerificationText}
+                            onChange={(e) => setResetVerificationText(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold font-mono focus:outline-none focus:border-rose-500 text-rose-600"
+                            placeholder="Saisissez supprimer tout"
+                          />
+                        </div>
+
+                        <div className="flex gap-3 pt-3 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmResetOpen(false);
+                              setResetVerificationText('');
+                            }}
+                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCompleteDatabaseReset}
+                            disabled={resetVerificationText.toLowerCase().trim() !== 'supprimer tout'}
+                            className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer disabled:opacity-40"
+                          >
+                            Réinitialiser tout
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              )}
+            </>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, handleFirestoreError, OperationType, auth, sanitizeData } from '../firebase';
-import { collection, doc, setDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, getDocs, writeBatch, updateDoc } from 'firebase/firestore';
 import { Club, Event, Team, Member, Convocation, PlayerMatchStat } from '../types';
 import { 
   Plus as PlusIcon, Calendar as CalendarIcon, Clock as ClockIcon, 
   MapPin as MapPinIcon, Check as CheckIcon, X as XIcon, Trash2 as TrashIcon, 
-  Award as AwardIcon, CheckSquare, Sparkles, Smile, ChevronRight,
-  Trophy, Star, Percent, Flame, Activity
+  Award as AwardIcon, CheckSquare, Sparkles, Smile, ChevronRight, ChevronLeft,
+  Trophy, Star, Percent, Flame, Activity, Users, Search, Share2, Sliders, Grid, List, Clipboard
 } from 'lucide-react';
 
 interface EventManagerProps {
@@ -20,15 +20,33 @@ interface EventManagerProps {
   clearQuickAction: () => void;
 }
 
+interface ExtendedEvent extends Event {
+  lineup?: {
+    goalkeeper?: string;
+    defenders?: string[];
+    midfielders?: string[];
+    attackers?: string[];
+  };
+}
+
 export default function EventManager({ 
   club, events, teams, members, onRefresh, quickAction, clearQuickAction 
 }: EventManagerProps) {
   const [viewMode, setViewMode] = useState<'calendar' | 'leaderboards'>('calendar');
-  const [detailsTab, setDetailsTab] = useState<'convocations' | 'bilan'>('convocations');
+  const [detailsTab, setDetailsTab] = useState<'convocations' | 'bilan' | 'tactique'>('convocations');
   const [showEventForm, setShowEventForm] = useState(quickAction === 'create_event');
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<ExtendedEvent | null>(null);
   const [convocations, setConvocations] = useState<Convocation[]>([]);
   const [isLoadingConvocations, setIsLoadingConvocations] = useState(false);
+
+  // Advanced Filtering and Calendar View State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<string>('all');
+  const [filterTeam, setFilterTeam] = useState<string>('all');
+  const [filterTime, setFilterTime] = useState<'all' | 'upcoming' | 'past'>('upcoming');
+  const [calendarView, setCalendarView] = useState<'list' | 'month'>('list');
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState<Date>(new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
 
   // All Statistics for Leaderboards & Form loading
   const [allPlayerStats, setAllPlayerStats] = useState<PlayerMatchStat[]>([]);
@@ -45,6 +63,85 @@ export default function EventManager({
     rating: number;
     comment: string;
   }>>({});
+
+  // Tactical Lineup Creator States
+  const [tacticalFormation, setTacticalFormation] = useState<'4-4-2' | '4-3-3' | '4-2-3-1' | '3-5-2'>('4-4-2');
+  const [tacticalAssignments, setTacticalAssignments] = useState<Record<string, string>>({}); // positionId -> memberId
+  const [manualAddMemberId, setManualAddMemberId] = useState('');
+
+  // Synchronize tactical assignments from convocations
+  useEffect(() => {
+    const assignments: Record<string, string> = {};
+    convocations.forEach(c => {
+      if (c.role === 'starter' && c.position) {
+        assignments[c.position] = c.memberId;
+      }
+    });
+    setTacticalAssignments(assignments);
+  }, [convocations]);
+
+  // Compute standard tactical positions coordinates (French terminology)
+  const formationPositions = React.useMemo(() => {
+    switch(tacticalFormation) {
+      case '4-3-3':
+        return {
+          'GB': { x: '50%', y: '88%' },
+          'DG': { x: '15%', y: '70%' },
+          'DC1': { x: '38%', y: '73%' },
+          'DC2': { x: '62%', y: '73%' },
+          'DD': { x: '85%', y: '70%' },
+          'MDC': { x: '50%', y: '54%' },
+          'MC1': { x: '30%', y: '44%' },
+          'MC2': { x: '70%', y: '44%' },
+          'AG': { x: '20%', y: '22%' },
+          'AC': { x: '50%', y: '16%' },
+          'AD': { x: '80%', y: '22%' }
+        };
+      case '4-2-3-1':
+        return {
+          'GB': { x: '50%', y: '88%' },
+          'DG': { x: '15%', y: '70%' },
+          'DC1': { x: '38%', y: '73%' },
+          'DC2': { x: '62%', y: '73%' },
+          'DD': { x: '85%', y: '70%' },
+          'MDF1': { x: '35%', y: '56%' },
+          'MDF2': { x: '65%', y: '56%' },
+          'MG': { x: '15%', y: '36%' },
+          'MOC': { x: '50%', y: '32%' },
+          'MD': { x: '85%', y: '36%' },
+          'BC': { x: '50%', y: '14%' }
+        };
+      case '3-5-2':
+        return {
+          'GB': { x: '50%', y: '88%' },
+          'DC1': { x: '25%', y: '73%' },
+          'DC2': { x: '50%', y: '75%' },
+          'DC3': { x: '75%', y: '73%' },
+          'MG': { x: '12%', y: '48%' },
+          'MDC': { x: '50%', y: '54%' },
+          'MC1': { x: '32%', y: '40%' },
+          'MC2': { x: '68%', y: '40%' },
+          'MD': { x: '88%', y: '48%' },
+          'BC1': { x: '35%', y: '18%' },
+          'BC2': { x: '65%', y: '18%' }
+        };
+      case '4-4-2':
+      default:
+        return {
+          'GB': { x: '50%', y: '88%' },
+          'DG': { x: '15%', y: '70%' },
+          'DC1': { x: '38%', y: '72%' },
+          'DC2': { x: '62%', y: '72%' },
+          'DD': { x: '85%', y: '70%' },
+          'MG': { x: '15%', y: '44%' },
+          'MC1': { x: '38%', y: '47%' },
+          'MC2': { x: '62%', y: '47%' },
+          'MD': { x: '85%', y: '44%' },
+          'BC1': { x: '35%', y: '18%' },
+          'BC2': { x: '65%', y: '18%' }
+        };
+    }
+  }, [tacticalFormation]);
 
   // Feedback State
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -269,6 +366,58 @@ export default function EventManager({
     }).sort((a, b) => b.rate - a.rate);
   }, [allConvocations, members]);
 
+  const disciplineLeaderboard = React.useMemo(() => {
+    const map: Record<string, { yellow: number; red: number; score: number }> = {};
+    allPlayerStats.forEach(stat => {
+      if (stat.yellowCards > 0 || stat.redCards > 0) {
+        if (!map[stat.memberId]) {
+          map[stat.memberId] = { yellow: 0, red: 0, score: 0 };
+        }
+        map[stat.memberId].yellow += stat.yellowCards;
+        map[stat.memberId].red += stat.redCards;
+        map[stat.memberId].score += (stat.yellowCards * 1) + (stat.redCards * 3);
+      }
+    });
+    return Object.entries(map)
+      .map(([memberId, counts]) => {
+        const m = members.find(player => player.id === memberId);
+        return {
+          memberId,
+          name: m ? `${m.firstName} ${m.lastName}` : "Joueur inconnu",
+          email: m?.email || '',
+          yellow: counts.yellow,
+          red: counts.red,
+          score: counts.score
+        };
+      })
+      .sort((a, b) => b.score - a.score); // highest penalty score first
+  }, [allPlayerStats, members]);
+
+  const ratingLeaderboard = React.useMemo(() => {
+    const map: Record<string, { sum: number; count: number }> = {};
+    allPlayerStats.forEach(stat => {
+      if (stat.rating > 0) {
+        if (!map[stat.memberId]) {
+          map[stat.memberId] = { sum: 0, count: 0 };
+        }
+        map[stat.memberId].sum += stat.rating;
+        map[stat.memberId].count += 1;
+      }
+    });
+    return Object.entries(map)
+      .map(([memberId, data]) => {
+        const m = members.find(player => player.id === memberId);
+        return {
+          memberId,
+          name: m ? `${m.firstName} ${m.lastName}` : "Joueur inconnu",
+          email: m?.email || '',
+          avgRating: Math.round((data.sum / data.count) * 10) / 10,
+          matchesRated: data.count
+        };
+      })
+      .sort((a, b) => b.avgRating - a.avgRating);
+  }, [allPlayerStats, members]);
+
   const fetchConvocations = async (eventId: string) => {
     setIsLoadingConvocations(true);
     try {
@@ -437,6 +586,218 @@ export default function EventManager({
     }
   };
 
+  // Dynamic Role check based on current user email
+  const currentUserEmail = auth.currentUser?.email;
+  const currentUserMember = members.find(m => m.email === currentUserEmail);
+  const currentUserRole = currentUserMember?.role || 'visiteur';
+  const canManage = ['admin', 'president', 'vice_president_1', 'vice_president_2', 'sec_general', 'tresorier', 'coach'].includes(currentUserRole);
+
+  const handleAddPlayerToConvocation = async (memberId: string) => {
+    if (!selectedEvent) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const convId = selectedEvent.id + '_' + memberId;
+      const convRef = doc(db, 'clubs', club.id, 'events', selectedEvent.id, 'convocations', convId);
+      await setDoc(convRef, {
+        id: convId,
+        eventId: selectedEvent.id,
+        memberId,
+        status: 'pending',
+        role: 'player',
+        updatedAt: new Date().toISOString()
+      }).catch(err => {
+        handleFirestoreError(err, OperationType.WRITE, `clubs/${club.id}/events/${selectedEvent.id}/convocations/${convId}`);
+        throw err;
+      });
+      await fetchConvocations(selectedEvent.id);
+      await fetchAllConvocations();
+    } catch (err: any) {
+      setError("Erreur d'ajout à la convocation : " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRemovePlayerFromConvocation = async (convId: string) => {
+    if (!selectedEvent) return;
+    if (!window.confirm("Retirer ce joueur de la convocation ?")) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      await deleteDoc(doc(db, 'clubs', club.id, 'events', selectedEvent.id, 'convocations', convId)).catch(err => {
+        handleFirestoreError(err, OperationType.DELETE, `clubs/${club.id}/events/${selectedEvent.id}/convocations/${convId}`);
+        throw err;
+      });
+      await fetchConvocations(selectedEvent.id);
+      await fetchAllConvocations();
+    } catch (err: any) {
+      setError("Erreur de retrait de la convocation : " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateConvocationRole = async (conv: Convocation, newRole: string) => {
+    if (!selectedEvent) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const convRef = doc(db, 'clubs', club.id, 'events', selectedEvent.id, 'convocations', conv.id);
+      await updateDoc(convRef, {
+        role: newRole,
+        updatedAt: new Date().toISOString()
+      }).catch(err => {
+        handleFirestoreError(err, OperationType.WRITE, `clubs/${club.id}/events/${selectedEvent.id}/convocations/${conv.id}`);
+        throw err;
+      });
+      await fetchConvocations(selectedEvent.id);
+    } catch (err: any) {
+      setError("Erreur de mise à jour du rôle : " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveLineup = async (updatedLineup: any) => {
+    if (!selectedEvent) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const path = `clubs/${club.id}/events/${selectedEvent.id}`;
+      const updatedEvent = {
+        ...selectedEvent,
+        lineup: updatedLineup
+      };
+      await setDoc(doc(db, 'clubs', club.id, 'events', selectedEvent.id), sanitizeData(updatedEvent)).catch(err => {
+        handleFirestoreError(err, OperationType.WRITE, path);
+        throw err;
+      });
+      setSelectedEvent(updatedEvent);
+      onRefresh();
+    } catch (err: any) {
+      setError("Erreur d'enregistrement de la composition : " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Generate a beautiful WhatsApp Convocations text template and return sharing URL
+  const getWhatsAppShareUrl = () => {
+    if (!selectedEvent) return '';
+    const dateStr = new Date(selectedEvent.start).toLocaleDateString('fr-FR', { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'long', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    
+    let text = `*📋 CONVOCATIONS - ${selectedEvent.title.toUpperCase()}*\n\n`;
+    text += `📅 *Date :* ${dateStr}\n`;
+    if (selectedEvent.location) text += `📍 *Lieu :* ${selectedEvent.location}\n`;
+    if (selectedEvent.opponent) text += `⚔️ *Adversaire :* ${selectedEvent.opponent}\n`;
+    text += `\n*🛡️ GROUPE CONVOQUÉ :*\n`;
+    
+    const starters = convocations.filter(c => c.role === 'starter');
+    const subs = convocations.filter(c => c.role === 'substitute');
+    const unassigned = convocations.filter(c => !c.role || (c.role !== 'starter' && c.role !== 'substitute'));
+    
+    if (starters.length > 0) {
+      text += `\n🌟 *Titulaires :*\n`;
+      starters.forEach(c => {
+        const m = members.find(player => player.id === c.memberId);
+        if (m) text += `- ${m.firstName} ${m.lastName} (${c.position || 'Non défini'})\n`;
+      });
+    }
+    
+    if (subs.length > 0) {
+      text += `\n🔄 *Remplaçants :*\n`;
+      subs.forEach(c => {
+        const m = members.find(player => player.id === c.memberId);
+        if (m) text += `- ${m.firstName} ${m.lastName}\n`;
+      });
+    }
+
+    if (unassigned.length > 0) {
+      if (starters.length === 0 && subs.length === 0) {
+        text += `\n📋 *Joueurs :*\n`;
+      } else {
+        text += `\n📋 *Autres convoqués :*\n`;
+      }
+      unassigned.forEach(c => {
+        const m = members.find(player => player.id === c.memberId);
+        if (m) text += `- ${m.firstName} ${m.lastName}\n`;
+      });
+    }
+    
+    text += `\n👉 *Merci de confirmer votre présence sur l'application dès que possible.*`;
+    return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+  };
+
+  // Filter events based on search, type, team, past/upcoming, and clicked date
+  const filteredEvents = React.useMemo(() => {
+    let list = [...events];
+    
+    if (searchTerm.trim() !== '') {
+      const q = searchTerm.toLowerCase();
+      list = list.filter(evt => 
+        evt.title.toLowerCase().includes(q) || 
+        evt.opponent?.toLowerCase().includes(q) || 
+        evt.location?.toLowerCase().includes(q)
+      );
+    }
+    
+    if (filterType !== 'all') {
+      list = list.filter(evt => evt.type === filterType);
+    }
+    
+    if (filterTeam !== 'all') {
+      list = list.filter(evt => evt.teamId === filterTeam);
+    }
+    
+    const now = new Date();
+    if (filterTime === 'upcoming') {
+      list = list.filter(evt => new Date(evt.start) >= now);
+    } else if (filterTime === 'past') {
+      list = list.filter(evt => new Date(evt.start) < now);
+    }
+
+    if (selectedCalendarDate) {
+      const targetStr = selectedCalendarDate.toDateString();
+      list = list.filter(evt => new Date(evt.start).toDateString() === targetStr);
+    }
+    
+    // Sort by chronological order (past events or upcoming)
+    return list.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  }, [events, searchTerm, filterType, filterTeam, filterTime, selectedCalendarDate]);
+
+  // Compute days for monthly grid view
+  const calendarDays = React.useMemo(() => {
+    const year = currentCalendarMonth.getFullYear();
+    const month = currentCalendarMonth.getMonth();
+    const firstDayIndexRaw = new Date(year, month, 1).getDay();
+    const firstDayIndex = firstDayIndexRaw === 0 ? 6 : firstDayIndexRaw - 1; 
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const days: (Date | null)[] = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push(null);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      days.push(new Date(year, month, d));
+    }
+    return days;
+  }, [currentCalendarMonth]);
+
+  const handlePrevMonth = () => {
+    setCurrentCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
   return (
     <div className="space-y-6">
       {/* View Mode Tabs Selector */}
@@ -474,20 +835,118 @@ export default function EventManager({
             exit={{ opacity: 0, y: -10 }}
             className="grid grid-cols-1 lg:grid-cols-3 gap-8"
           >
-            {/* Calendar List Column */}
+            {/* Calendar List/Month Column */}
             <div className="lg:col-span-2 space-y-6">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <h3 className="font-bold text-slate-900 text-xl">Calendrier & Matchs</h3>
-                  <p className="text-xs text-slate-400">Planification des activités du club.</p>
+                  <h3 className="font-extrabold text-slate-900 text-2xl tracking-tight flex items-center gap-2">
+                    <CalendarIcon className="w-6 h-6 text-emerald-600" />
+                    Calendrier & Matchs
+                  </h3>
+                  <p className="text-xs text-slate-400">Planification des activités, gestion d'effectifs et résultats.</p>
                 </div>
-                <button
-                  onClick={() => setShowEventForm(true)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition cursor-pointer"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                  Créer un événement
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* View Toggle */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      onClick={() => setCalendarView('list')}
+                      className={`p-1.5 rounded-lg transition cursor-pointer ${
+                        calendarView === 'list' ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                      title="Vue Liste"
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCalendarView('month')}
+                      className={`p-1.5 rounded-lg transition cursor-pointer ${
+                        calendarView === 'month' ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                      title="Vue Calendrier Mensuel"
+                    >
+                      <Grid className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {canManage && (
+                    <button
+                      onClick={() => setShowEventForm(true)}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm px-4 py-2 rounded-xl shadow-md shadow-emerald-600/10 flex items-center gap-2 transition cursor-pointer"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                      Créer un événement
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Advanced Filter Toolbar */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+                <div className="flex flex-col md:flex-row gap-3">
+                  {/* Search Bar */}
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher par adversaire, lieu, titre..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition outline-none"
+                    />
+                  </div>
+
+                  {/* Filter Selects */}
+                  <div className="grid grid-cols-3 gap-2 shrink-0">
+                    <select
+                      value={filterType}
+                      onChange={(e) => setFilterType(e.target.value)}
+                      className="px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 font-medium text-slate-700 outline-none cursor-pointer"
+                    >
+                      <option value="all">Tous types</option>
+                      <option value="match">⚽ Matchs</option>
+                      <option value="training">🏃 Entraînements</option>
+                      <option value="tournament">🏆 Tournois</option>
+                      <option value="other">📅 Autres</option>
+                    </select>
+
+                    <select
+                      value={filterTeam}
+                      onChange={(e) => setFilterTeam(e.target.value)}
+                      className="px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 font-medium text-slate-700 outline-none cursor-pointer"
+                    >
+                      <option value="all">Équipes (Toutes)</option>
+                      {teams.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={filterTime}
+                      onChange={(e) => setFilterTime(e.target.value as any)}
+                      className="px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 font-medium text-slate-700 outline-none cursor-pointer"
+                    >
+                      <option value="upcoming">🗓️ À venir</option>
+                      <option value="past">✅ Passés</option>
+                      <option value="all">♾️ Tout</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Day Filter Indicator */}
+                {selectedCalendarDate && (
+                  <div className="flex items-center justify-between bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl px-3 py-1.5 text-xs animate-fadeIn">
+                    <span className="flex items-center gap-1.5 font-semibold">
+                      <CalendarIcon className="w-3.5 h-3.5 text-emerald-600" />
+                      Filtre : {selectedCalendarDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    </span>
+                    <button
+                      onClick={() => setSelectedCalendarDate(null)}
+                      className="text-[10px] font-bold text-emerald-600 hover:text-emerald-800 cursor-pointer uppercase outline-none"
+                    >
+                      Effacer le filtre
+                    </button>
+                  </div>
+                )}
               </div>
 
               {error && (
@@ -521,7 +980,7 @@ export default function EventManager({
                           placeholder="ex: Match vs FC Lyon, Entraînement Technique..."
                           value={title}
                           onChange={(e) => setTitle(e.target.value)}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm"
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                         />
                       </div>
 
@@ -531,7 +990,7 @@ export default function EventManager({
                           value={teamId}
                           onChange={(e) => setTeamId(e.target.value)}
                           required
-                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                         >
                           <option value="">Sélectionner une équipe...</option>
                           {teams.map(t => (
@@ -547,7 +1006,7 @@ export default function EventManager({
                         <select
                           value={type}
                           onChange={(e) => setType(e.target.value as any)}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                         >
                           <option value="match">⚽ Match officiel</option>
                           <option value="training">🏃 Entraînement</option>
@@ -563,7 +1022,7 @@ export default function EventManager({
                           required
                           value={start}
                           onChange={(e) => setStart(e.target.value)}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm"
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                         />
                       </div>
 
@@ -574,7 +1033,7 @@ export default function EventManager({
                           required
                           value={end}
                           onChange={(e) => setEnd(e.target.value)}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm"
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                         />
                       </div>
                     </div>
@@ -587,7 +1046,7 @@ export default function EventManager({
                           placeholder="ex: Stade Municipal, Terrain Honneur..."
                           value={location}
                           onChange={(e) => setLocation(e.target.value)}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm"
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                         />
                       </div>
 
@@ -599,7 +1058,7 @@ export default function EventManager({
                             placeholder="ex: Olympique Lyonnais"
                             value={opponent}
                             onChange={(e) => setOpponent(e.target.value)}
-                            className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm"
+                            className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                           />
                         </div>
                       )}
@@ -626,14 +1085,102 @@ export default function EventManager({
                 </motion.div>
               )}
 
+              {/* Monthly Calendar Grid */}
+              {calendarView === 'month' && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                  {/* Month Selector Header */}
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                    <h4 className="font-extrabold text-slate-800 text-sm capitalize">
+                      {currentCalendarMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                    </h4>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={handlePrevMonth}
+                        className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-lg transition cursor-pointer"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setCurrentCalendarMonth(new Date())}
+                        className="text-[10px] font-bold px-2 py-1 text-emerald-600 hover:bg-emerald-50 rounded-lg transition cursor-pointer uppercase"
+                      >
+                        Aujourd'hui
+                      </button>
+                      <button
+                        onClick={handleNextMonth}
+                        className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-lg transition cursor-pointer"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div className="grid grid-cols-7 gap-1.5 text-center">
+                    {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
+                      <div key={day} className="text-[10px] font-bold text-slate-400 uppercase py-1">
+                        {day}
+                      </div>
+                    ))}
+
+                    {calendarDays.map((date, idx) => {
+                      if (!date) {
+                        return <div key={`empty-${idx}`} className="aspect-square bg-slate-50/50 rounded-lg" />;
+                      }
+
+                      const isToday = date.toDateString() === new Date().toDateString();
+                      const isSelectedDate = selectedCalendarDate?.toDateString() === date.toDateString();
+                      
+                      // Find events on this date
+                      const dayEvents = events.filter(evt => new Date(evt.start).toDateString() === date.toDateString());
+
+                      return (
+                        <div
+                          key={date.toISOString()}
+                          onClick={() => setSelectedCalendarDate(date)}
+                          className={`aspect-square p-1 rounded-lg cursor-pointer transition flex flex-col justify-between items-center border ${
+                            isSelectedDate 
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-600/20' 
+                              : isToday 
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-extrabold' 
+                              : 'bg-white border-slate-100 hover:bg-slate-50 text-slate-800'
+                          }`}
+                        >
+                          <span className="text-[11px] font-bold leading-none">{date.getDate()}</span>
+                          
+                          {/* Event Dots indicator */}
+                          {dayEvents.length > 0 && (
+                            <div className="flex gap-1 justify-center max-w-full overflow-hidden">
+                              {dayEvents.slice(0, 3).map(evt => (
+                                <span 
+                                  key={evt.id} 
+                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                    isSelectedDate ? 'bg-white' :
+                                    evt.type === 'match' ? 'bg-red-500' :
+                                    evt.type === 'training' ? 'bg-blue-500' : 'bg-slate-400'
+                                  }`} 
+                                />
+                              ))}
+                              {dayEvents.length > 3 && (
+                                <span className={`text-[7px] font-bold shrink-0 ${isSelectedDate ? 'text-white' : 'text-slate-400'}`}>+</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Calendar Lists */}
               <div className="space-y-4">
-                {events.length === 0 ? (
+                {filteredEvents.length === 0 ? (
                   <div className="py-12 bg-white border border-slate-200 rounded-2xl text-center text-slate-400 text-sm">
-                    Aucun événement dans le calendrier de votre club.
+                    Aucun événement correspondant aux filtres sélectionnés.
                   </div>
                 ) : (
-                  events.map(evt => {
+                  filteredEvents.map(evt => {
                     const team = teams.find(t => t.id === evt.teamId);
                     const isSelected = selectedEvent?.id === evt.id;
 
@@ -721,64 +1268,86 @@ export default function EventManager({
                 {selectedEvent ? (
                   <div className="space-y-6">
                     <div>
-                      <h4 className="font-extrabold text-slate-900 text-lg leading-tight">Feuille de Convocations</h4>
-                      <p className="text-xs text-slate-400 mt-1 truncate">Pour : {selectedEvent.title}</p>
+                      <h4 className="font-extrabold text-slate-900 text-lg leading-tight">{selectedEvent.title}</h4>
+                      <p className="text-xs text-slate-400 mt-1 truncate">Gestion de l'effectif & feuille de match</p>
                     </div>
 
                     {/* Sub Tab Selector if event is a match */}
-                    {selectedEvent.type === 'match' && (
-                      <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
+                    {selectedEvent.type === 'match' ? (
+                      <div className="flex bg-slate-100 p-1 rounded-xl mb-4 border border-slate-200">
                         <button
                           type="button"
                           onClick={() => setDetailsTab('convocations')}
-                          className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
-                            detailsTab === 'convocations' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                          className={`flex-1 py-2 text-[11px] font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1 ${
+                            detailsTab === 'convocations' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
                           }`}
                         >
                           👥 Présence ({convocations.length})
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDetailsTab('bilan')}
-                          className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
-                            detailsTab === 'bilan' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                          onClick={() => setDetailsTab('tactique')}
+                          className={`flex-1 py-2 text-[11px] font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1 ${
+                            detailsTab === 'tactique' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
                           }`}
                         >
-                          📝 Bilan du Match
+                          🗺️ Tactique
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setDetailsTab('bilan')}
+                          className={`flex-1 py-2 text-[11px] font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1 ${
+                            detailsTab === 'bilan' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          📝 Bilan
+                        </button>
+                      </div>
+                    ) : (
+                      // For non-matches, default to convocations/presence tab
+                      <div className="bg-slate-50 p-2 rounded-xl text-xs font-bold text-slate-500 flex items-center gap-1">
+                        🗓️ Événement d'entraînement ou autre activité
                       </div>
                     )}
 
-                    {/* TAB CONTENT: CONVOCATIONS & ATTENDANCE */}
+                    {/* TAB CONTENT: CONVOCATIONS & PRESENCE */}
                     {(selectedEvent.type !== 'match' || detailsTab === 'convocations') ? (
-                      <div className="space-y-6">
-                        {/* Match Score Entry Form (only for match type) */}
+                      <div className="space-y-6 animate-fadeIn">
+                        {/* Score Capture at top of Convocations */}
                         {selectedEvent.type === 'match' && (
                           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
-                            <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                            <h5 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1">
                               <AwardIcon className="w-4 h-4 text-emerald-600" />
                               Saisir le Score du Match
                             </h5>
                             <form onSubmit={handleSaveScore} className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                placeholder="Home"
-                                value={scoreHome}
-                                onChange={(e) => setScoreHome(e.target.value)}
-                                className="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-center text-sm font-bold bg-white"
-                              />
-                              <span className="font-extrabold text-slate-400">-</span>
-                              <input
-                                type="number"
-                                placeholder="Away"
-                                value={scoreAway}
-                                onChange={(e) => setScoreAway(e.target.value)}
-                                className="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-center text-sm font-bold bg-white"
-                              />
+                              <div className="flex-1 flex items-center justify-center gap-2">
+                                <div className="text-center">
+                                  <span className="text-[10px] text-slate-400 font-bold block mb-1">CLUB</span>
+                                  <input
+                                    type="number"
+                                    placeholder="Score"
+                                    value={scoreHome}
+                                    onChange={(e) => setScoreHome(e.target.value)}
+                                    className="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-center text-sm font-bold bg-white outline-none"
+                                  />
+                                </div>
+                                <span className="font-extrabold text-slate-400 mt-4">-</span>
+                                <div className="text-center">
+                                  <span className="text-[10px] text-slate-400 font-bold block mb-1">ADV</span>
+                                  <input
+                                    type="number"
+                                    placeholder="Score"
+                                    value={scoreAway}
+                                    onChange={(e) => setScoreAway(e.target.value)}
+                                    className="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-center text-sm font-bold bg-white outline-none"
+                                  />
+                                </div>
+                              </div>
                               <button
                                 type="submit"
                                 disabled={isLoading}
-                                className="flex-1 bg-slate-900 text-white font-semibold py-1.5 px-3 rounded-lg text-xs hover:bg-slate-800 transition cursor-pointer"
+                                className="bg-slate-900 text-white font-semibold py-2 px-3 rounded-lg text-xs hover:bg-slate-800 transition cursor-pointer self-end mb-0.5"
                               >
                                 Enregistrer
                               </button>
@@ -786,10 +1355,60 @@ export default function EventManager({
                           </div>
                         )}
 
+                        {/* WhatsApp Share Button */}
+                        <div className="flex justify-end">
+                          <a
+                            href={getWhatsAppShareUrl()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-[#25D366] hover:bg-[#1ebd54] text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition cursor-pointer w-full justify-center"
+                          >
+                            <Share2 className="w-4 h-4" />
+                            Partager les convocations sur WhatsApp
+                          </a>
+                        </div>
+
+                        {/* Add Player manually Section */}
+                        {canManage && (
+                          <div className="p-4 bg-slate-50/50 border border-slate-200 rounded-xl space-y-3">
+                            <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                              <PlusIcon className="w-4 h-4 text-emerald-600" />
+                              Convoquer un joueur manuellement
+                            </h5>
+                            <div className="flex gap-2">
+                              <select
+                                id="manual-add-player-select"
+                                value={manualAddMemberId}
+                                onChange={(e) => setManualAddMemberId(e.target.value)}
+                                className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 outline-none"
+                              >
+                                <option value="">Choisir un joueur...</option>
+                                {members
+                                  .filter(m => m.role === 'player' && !convocations.some(c => c.memberId === m.id))
+                                  .map(m => (
+                                    <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                                  ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (manualAddMemberId) {
+                                    handleAddPlayerToConvocation(manualAddMemberId);
+                                    setManualAddMemberId('');
+                                  }
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-3 py-2 rounded-xl text-xs transition cursor-pointer"
+                              >
+                                Convoquer
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="space-y-4">
                           <div className="flex justify-between items-center text-xs text-slate-500 font-bold border-b border-slate-100 pb-2">
-                            <span>Joueurs Convoqués</span>
-                            <span>Statut de présence</span>
+                            <span>Membres Convoqués ({convocations.length})</span>
+                            <span>Statut & Rôle</span>
                           </div>
 
                           {isLoadingConvocations ? (
@@ -807,47 +1426,221 @@ export default function EventManager({
                                 return (
                                   <div
                                     key={conv.id}
-                                    className="flex justify-between items-center p-2.5 border border-slate-50 bg-slate-50/50 rounded-xl text-sm"
+                                    className="p-3 border border-slate-100 bg-slate-50/50 rounded-xl space-y-2 text-sm"
                                   >
-                                    <div>
-                                      <p className="font-bold text-slate-800 leading-tight">{member.firstName} {member.lastName}</p>
-                                      <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Joueur du club</p>
+                                    <div className="flex justify-between items-start gap-2">
+                                      <div>
+                                        <p className="font-extrabold text-slate-800 leading-tight">{member.firstName} {member.lastName}</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                                          {conv.role === 'starter' ? '🌟 Titulaire' : conv.role === 'substitute' ? '🔄 Remplaçant' : '📋 Convoqué'}
+                                          {conv.position ? ` - ${conv.position}` : ''}
+                                        </p>
+                                      </div>
+
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                          onClick={() => handleUpdateStatus(conv, 'confirmed')}
+                                          className={`p-1 rounded-lg border transition cursor-pointer ${
+                                            conv.status === 'confirmed' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-white text-slate-400 hover:bg-slate-50 border-slate-200'
+                                          }`}
+                                          title="Présent"
+                                        >
+                                          <CheckIcon className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleUpdateStatus(conv, 'declined')}
+                                          className={`p-1 rounded-lg border transition cursor-pointer ${
+                                            conv.status === 'declined' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-white text-slate-400 hover:bg-slate-50 border-slate-200'
+                                          }`}
+                                          title="Absent"
+                                        >
+                                          <XIcon className="w-3.5 h-3.5" />
+                                        </button>
+                                        {canManage && (
+                                          <button
+                                            onClick={() => handleRemovePlayerFromConvocation(conv.id)}
+                                            className="p-1 text-slate-300 hover:text-red-500 rounded-lg transition cursor-pointer"
+                                            title="Désinviter"
+                                          >
+                                            <TrashIcon className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
 
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        onClick={() => handleUpdateStatus(conv, 'confirmed')}
-                                        className={`p-1.5 rounded-lg border transition cursor-pointer ${
-                                          conv.status === 'confirmed' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-white text-slate-400 hover:bg-slate-50 border-slate-200'
-                                        }`}
-                                        title="Présent / Confirmé"
-                                      >
-                                        <CheckIcon className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleUpdateStatus(conv, 'declined')}
-                                        className={`p-1.5 rounded-lg border transition cursor-pointer ${
-                                          conv.status === 'declined' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-white text-slate-400 hover:bg-slate-50 border-slate-200'
-                                        }`}
-                                        title="Décliné / Absent"
-                                      >
-                                        <XIcon className="w-3.5 h-3.5" />
-                                      </button>
-                                      
-                                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg ml-1 ${
-                                        conv.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700' :
-                                        conv.status === 'declined' ? 'bg-red-50 text-red-700' :
-                                        'bg-amber-50 text-amber-700'
-                                      }`}>
-                                        {conv.status === 'confirmed' ? 'Oui' : conv.status === 'declined' ? 'Non' : 'Attente'}
-                                      </span>
-                                    </div>
+                                    {/* Starter / Substitute Quick Selection Dropdown */}
+                                    {canManage && (
+                                      <div className="flex items-center gap-2 pt-1 border-t border-slate-100/50">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Statut :</span>
+                                        <select
+                                          value={conv.role || ''}
+                                          onChange={(e) => handleUpdateConvocationRole(conv, e.target.value)}
+                                          className="text-[10px] font-semibold text-slate-700 bg-white border border-slate-200 rounded px-1.5 py-0.5 outline-none cursor-pointer"
+                                        >
+                                          <option value="">📋 Non défini</option>
+                                          <option value="starter">🌟 Titulaire</option>
+                                          <option value="substitute">🔄 Remplaçant</option>
+                                        </select>
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
                             </div>
                           )}
                         </div>
+                      </div>
+                    ) : detailsTab === 'tactique' ? (
+                      <div className="space-y-4 animate-fadeIn">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-500 uppercase">Dispositif :</span>
+                          <select
+                            value={tacticalFormation}
+                            onChange={(e) => setTacticalFormation(e.target.value as any)}
+                            className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white font-bold text-slate-800 outline-none cursor-pointer"
+                          >
+                            <option value="4-4-2">4-4-2 Standard</option>
+                            <option value="4-3-3">4-3-3 Attaque</option>
+                            <option value="4-2-3-1">4-2-3-1 Équilibré</option>
+                            <option value="3-5-2">3-5-2 Moderne</option>
+                          </select>
+                        </div>
+
+                        {/* Interactive Green Soccer Pitch Canvas */}
+                        <div className="relative w-full h-[360px] bg-emerald-800 rounded-2xl overflow-hidden border-4 border-emerald-900 shadow-inner">
+                          {/* Pitch Markings */}
+                          <div className="absolute inset-2 border border-white/20 pointer-events-none rounded-lg" />
+                          <div className="absolute top-1/2 left-2 right-2 h-px bg-white/20 pointer-events-none" />
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white/20 rounded-full pointer-events-none" />
+                          
+                          {/* Goal Areas */}
+                          <div className="absolute top-2 left-1/2 -translate-x-1/2 w-32 h-14 border border-white/20 border-t-0 pointer-events-none" />
+                          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-14 border border-white/20 border-b-0 pointer-events-none" />
+
+                          {/* Render Pitch Player Dots */}
+                          {Object.entries(formationPositions).map(([posId, pos]: [string, any]) => {
+                            const memberId = tacticalAssignments[posId];
+                            const assignedPlayer = memberId ? members.find(m => m.id === memberId) : null;
+
+                            return (
+                              <div 
+                                key={posId}
+                                className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10"
+                                style={{ left: pos.x, top: pos.y }}
+                              >
+                                <div className="relative group flex flex-col items-center">
+                                  {/* Circular Player dot */}
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black border-2 shadow-lg transition duration-200 ${
+                                    assignedPlayer 
+                                      ? 'bg-yellow-400 text-slate-950 border-yellow-300 scale-110 font-bold' 
+                                      : 'bg-emerald-700 text-emerald-100 border-white/40 hover:bg-emerald-600 cursor-pointer'
+                                  }`}>
+                                    {assignedPlayer ? `${assignedPlayer.firstName[0]}${assignedPlayer.lastName[0]}` : '+'}
+                                  </div>
+                                  
+                                  {/* Position name label */}
+                                  <span className="bg-slate-950/85 text-[8px] font-extrabold text-white px-1.5 py-0.5 rounded mt-0.5 whitespace-nowrap uppercase tracking-wider block text-center shadow-sm">
+                                    {assignedPlayer ? `${assignedPlayer.lastName}` : posId}
+                                  </span>
+
+                                  {/* Select menu overlaid invisibly */}
+                                  {canManage && (
+                                    <select
+                                      value={memberId || ''}
+                                      onChange={async (e) => {
+                                        const val = e.target.value;
+                                        if (val === '') {
+                                          // Free up position
+                                          const currentConv = convocations.find(c => c.memberId === memberId);
+                                          if (currentConv) {
+                                            const ref = doc(db, 'clubs', club.id, 'events', selectedEvent.id, 'convocations', currentConv.id);
+                                            await updateDoc(ref, { 
+                                              role: '', 
+                                              position: '',
+                                              updatedAt: new Date().toISOString()
+                                            });
+                                            await fetchConvocations(selectedEvent.id);
+                                          }
+                                        } else {
+                                          // Assign player
+                                          const targetConv = convocations.find(c => c.memberId === val);
+                                          if (targetConv) {
+                                            const ref = doc(db, 'clubs', club.id, 'events', selectedEvent.id, 'convocations', targetConv.id);
+                                            await updateDoc(ref, { 
+                                              role: 'starter',
+                                              position: posId,
+                                              updatedAt: new Date().toISOString()
+                                            });
+                                            await fetchConvocations(selectedEvent.id);
+                                          }
+                                        }
+                                      }}
+                                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-20"
+                                    >
+                                      <option value="">-- Libre ({posId}) --</option>
+                                      {convocations.map(c => {
+                                        const m = members.find(player => player.id === c.memberId);
+                                        if (!m) return null;
+                                        const isAssigned = Object.values(tacticalAssignments).includes(c.memberId);
+                                        return (
+                                          <option key={c.id} value={c.memberId}>
+                                            {m.firstName} {m.lastName} {isAssigned ? '⚠️ (Déjà placé)' : ''}
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* List of Substitutes */}
+                        <div className="space-y-2">
+                          <span className="text-xs font-bold text-slate-500 uppercase block">🔄 Remplaçants du Match :</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            {convocations.filter(c => c.role === 'substitute').length === 0 ? (
+                              <p className="text-[10px] text-slate-400 font-semibold italic col-span-2">Aucun remplaçant désigné. Tentez d'ajuster leur rôle dans l'onglet Présence.</p>
+                            ) : (
+                              convocations.filter(c => c.role === 'substitute').map(c => {
+                                const m = members.find(player => player.id === c.memberId);
+                                if (!m) return null;
+                                return (
+                                  <div key={c.id} className="p-2 bg-slate-50 border border-slate-150 rounded-xl flex items-center justify-between text-xs">
+                                    <span className="font-extrabold text-slate-700 truncate">{m.firstName} {m.lastName}</span>
+                                    {canManage && (
+                                      <button
+                                        onClick={() => handleUpdateConvocationRole(c, '')}
+                                        className="text-[9px] font-bold text-red-500 hover:text-red-700 cursor-pointer"
+                                      >
+                                        Enlever
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Save Action */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const startersList = convocations.filter(c => c.role === 'starter').map(c => c.memberId);
+                            const subsList = convocations.filter(c => c.role === 'substitute').map(c => c.memberId);
+                            handleSaveLineup({
+                              defenders: startersList,
+                              midfielders: subsList
+                            });
+                            setSuccessMsg("Composition et schéma tactique enregistrés avec succès !");
+                          }}
+                          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Clipboard className="w-4 h-4" />
+                          Enregistrer la Compo Officielle
+                        </button>
                       </div>
                     ) : (
                       /* TAB CONTENT: BILAN & STATS DU MATCH (COACH INPUTS) */

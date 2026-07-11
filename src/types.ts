@@ -8,12 +8,25 @@ export interface Club {
   createdAt: string;
 }
 
+export type UserRole = 
+  | 'admin'
+  | 'president'
+  | 'vice_president_1'
+  | 'vice_president_2'
+  | 'sec_general'
+  | 'tresorier'
+  | 'membre_actif'
+  | 'adherent'
+  | 'player'
+  | 'visiteur'
+  | 'coach';
+
 export interface Member {
   id: string;
   clubId: string;
   firstName: string;
   lastName: string;
-  role: 'player' | 'coach' | 'admin';
+  role: UserRole;
   email: string;
   phone?: string;
   licenseNumber?: string;
@@ -29,6 +42,9 @@ export interface Member {
   registrationFormFile?: { name: string; size: number; base64: string; uploadedAt: string };
   parentalAuthStatus?: 'valid' | 'renew' | 'missing';
   parentalAuthFile?: { name: string; size: number; base64: string; uploadedAt: string };
+  charterSigned?: boolean;
+  charterSignedDate?: string;
+  charterSignatureBase64?: string;
 }
 
 export interface Team {
@@ -109,5 +125,25 @@ export interface PlayerMatchStat {
   redCards: number;
   rating: number; // e.g. 1 to 10, or 0 if unrated
   comment?: string;
+}
+
+export interface FeedbackItem {
+  id: string;
+  clubId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userRole: UserRole;
+  title: string;
+  description: string;
+  type: 'suggestion' | 'bug' | 'question' | 'compliment';
+  category: 'app' | 'club_life' | 'events' | 'equipment' | 'other';
+  priority: 'low' | 'medium' | 'high';
+  rating: number; // 1 to 5 stars
+  status: 'new' | 'in_progress' | 'resolved' | 'closed';
+  createdAt: string;
+  adminResponse?: string;
+  adminRespondedAt?: string;
+  adminResponderEmail?: string;
 }
 

@@ -34,14 +34,16 @@ service cloud.firestore {
 
     function isClubAdmin(clubId) {
       return isVerified() && (
-        (exists(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid)) && getMember(clubId).role == 'admin') ||
+        (exists(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid)) && 
+         getMember(clubId).role in ['admin', 'president', 'sec_general', 'tresorier']) ||
         (exists(/databases/$(database)/documents/clubs/$(clubId)) && get(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid)
       );
     }
 
     function isClubCoach(clubId) {
       return isVerified() && (
-        (exists(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid)) && (getMember(clubId).role == 'coach' || getMember(clubId).role == 'admin')) ||
+        (exists(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid)) && 
+         getMember(clubId).role in ['admin', 'president', 'vice_president_1', 'vice_president_2', 'sec_general', 'tresorier', 'coach']) ||
         (exists(/databases/$(database)/documents/clubs/$(clubId)) && get(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid)
       );
     }
@@ -91,7 +93,7 @@ service cloud.firestore {
                        request.resource.data.clubId == clubId &&
                        request.resource.data.firstName is string && request.resource.data.firstName.size() <= 50 &&
                        request.resource.data.lastName is string && request.resource.data.lastName.size() <= 50 &&
-                       request.resource.data.role in ['player', 'coach', 'admin'] &&
+                       request.resource.data.role in ['admin', 'president', 'vice_president_1', 'vice_president_2', 'sec_general', 'tresorier', 'membre_actif', 'adherent', 'player', 'visiteur', 'coach'] &&
                        request.resource.data.email is string && request.resource.data.email.size() <= 100;
 
         allow update: if isVerified() && isValidId(memberId) &&
@@ -154,6 +156,7 @@ service cloud.firestore {
 
           allow delete: if isVerified() && isClubCoach(clubId);
         }
+      }
 
       // Sub-collection: Player Stats (Match report statistics)
       match /playerStats/{statId} {
@@ -211,6 +214,25 @@ service cloud.firestore {
                        request.resource.data.content is string && request.resource.data.content.size() <= 1000;
 
         allow update, delete: if isVerified() && (resource.data.senderId == request.auth.uid || isClubAdmin(clubId));
+      }
+
+      // Sub-collection: Settings
+      match /settings/{settingId} {
+        allow read: if isVerified() && isMember(clubId);
+        allow write: if isVerified() && isClubAdmin(clubId);
+      }
+
+      // Sub-collection: Feedbacks
+      match /feedbacks/{feedbackId} {
+        allow read: if isVerified() && (isClubAdmin(clubId) || (resource != null && resource.data.userId == request.auth.uid));
+        allow create: if isVerified() && isValidId(feedbackId) &&
+                        request.resource.data.clubId == clubId &&
+                        request.resource.data.userId == request.auth.uid;
+        allow update: if isVerified() && (
+                        isClubAdmin(clubId) || 
+                        (resource != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid)
+                      );
+        allow delete: if isVerified() && (isClubAdmin(clubId) || (resource != null && resource.data.userId == request.auth.uid));
       }
     }
   }
