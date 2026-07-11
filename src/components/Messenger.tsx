@@ -20,7 +20,7 @@ export default function Messenger({ club, teams }: MessengerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setIsLoading(true);
@@ -39,9 +39,11 @@ export default function Messenger({ club, teams }: MessengerProps) {
       setMessages(list);
       setIsLoading(false);
       
-      // Scroll to bottom
+      // Scroll to bottom of container only
       setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
       }, 100);
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, `clubs/${club.id}/messages`);
@@ -155,7 +157,7 @@ export default function Messenger({ club, teams }: MessengerProps) {
         </div>
 
         {/* Message Feed Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6 space-y-4">
           {isLoading ? (
             <div className="h-full flex items-center justify-center">
               <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
@@ -204,7 +206,6 @@ export default function Messenger({ club, teams }: MessengerProps) {
                 );
               })
           )}
-          <div ref={bottomRef} />
         </div>
 
         {/* Input Form Box */}

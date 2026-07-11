@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Activity, Users, Calendar, CreditCard, MessageSquare, LogOut, 
-  ChevronRight, LayoutDashboard, Compass, RefreshCw, AlertCircle,
+  ChevronRight, ChevronLeft, LayoutDashboard, Compass, RefreshCw, AlertCircle,
   ShieldCheck, Settings2, ShieldAlert, X, Brain, MessageSquareHeart,
-  User as UserIcon, Shirt
+  User as UserIcon, Shirt, Menu
 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
@@ -48,6 +48,8 @@ export default function App() {
   // Tab states: 'dashboard' | 'membres' | 'calendrier' | 'finances' | 'messagerie'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [quickAction, setQuickAction] = useState<string | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Firestore collections states
   const [members, setMembers] = useState<Member[]>([]);
@@ -497,34 +499,79 @@ export default function App() {
 
   return (
     <div id="hourasports-app" className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
+      {/* Mobile Top Navigation Header */}
+      <div className="md:hidden bg-slate-900 text-slate-300 p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-md">
+            <Activity className="w-5.5 h-5.5" />
+          </div>
+          <div>
+            <h2 className="font-black text-white text-sm tracking-tight leading-none">HouraSports</h2>
+            <span className="text-[8px] text-emerald-400 font-extrabold uppercase tracking-widest mt-0.5 block">SaaS de club</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] bg-slate-850 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-800 font-bold max-w-[120px] truncate">
+            {selectedClub.name}
+          </span>
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+          >
+            {isMobileMenuOpen ? <X className="w-5.5 h-5.5" /> : <Menu className="w-5.5 h-5.5" />}
+          </button>
+        </div>
+      </div>
+
       {/* Sidebar navigation */}
-      <aside className="w-full md:w-72 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-850">
-        <div className="p-6 space-y-8">
+      <aside className={`w-full bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-850 transition-all duration-350 ease-in-out ${
+        isSidebarCollapsed ? 'md:w-20' : 'md:w-72'
+      } ${
+        isMobileMenuOpen ? 'block' : 'hidden md:flex'
+      }`}>
+        <div className={`p-6 space-y-8 ${isSidebarCollapsed ? 'md:p-3 md:space-y-6' : ''}`}>
           {/* Logo Brand */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-md">
-              <Activity className="w-6 h-6" />
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-md shrink-0">
+                <Activity className="w-6 h-6" />
+              </div>
+              {!isSidebarCollapsed && (
+                <div className="transition-all duration-300 opacity-100 animate-fadeIn">
+                  <h2 className="font-black text-white text-lg tracking-tight">HouraSports</h2>
+                  <p className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-widest">SaaS de club</p>
+                </div>
+              )}
             </div>
-            <div>
-              <h2 className="font-black text-white text-lg tracking-tight">HouraSports</h2>
-              <p className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-widest">SaaS de club</p>
-            </div>
+            
+            {/* Collapse toggle button for desktop */}
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="hidden md:flex p-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-750 transition cursor-pointer shrink-0"
+              title={isSidebarCollapsed ? "Développer le menu" : "Réduire le menu"}
+            >
+              {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
           </div>
 
           {/* Club Info Bar */}
-          <div className="p-4 bg-slate-850 rounded-xl border border-slate-800 flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-bold text-sm uppercase">
+          <div className={`p-4 bg-slate-850 rounded-xl border border-slate-800 flex items-center gap-3 transition-all ${
+            isSidebarCollapsed ? 'md:p-2 md:justify-center' : ''
+          }`}>
+            <div className="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-bold text-sm uppercase shrink-0">
               {selectedClub.name.substring(0, 2)}
             </div>
-            <div className="overflow-hidden">
-              <p className="font-bold text-white text-sm truncate leading-tight">{selectedClub.name}</p>
-              <button 
-                onClick={() => setSelectedClub(null)}
-                className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold transition flex items-center gap-0.5 mt-0.5 cursor-pointer"
-              >
-                <Compass className="w-3 h-3" /> Changer de club
-              </button>
-            </div>
+            {!isSidebarCollapsed && (
+              <div className="overflow-hidden animate-fadeIn">
+                <p className="font-bold text-white text-sm truncate leading-tight">{selectedClub.name}</p>
+                <button 
+                  onClick={() => setSelectedClub(null)}
+                  className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold transition flex items-center gap-0.5 mt-0.5 cursor-pointer"
+                >
+                  <Compass className="w-3 h-3" /> Changer de club
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Main Navigation links */}
@@ -537,15 +584,22 @@ export default function App() {
                   onClick={() => {
                     setActiveTab(item.id);
                     setQuickAction(null);
+                    window.scrollTo({ top: 0 });
+                    setIsMobileMenuOpen(false);
                   }}
+                  title={item.label}
                   className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-bold tracking-tight transition cursor-pointer ${
+                    isSidebarCollapsed ? 'md:justify-center md:px-2 md:py-3' : ''
+                  } ${
                     isActive 
                       ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/25' 
                       : 'hover:bg-slate-800 text-slate-400 hover:text-slate-150'
                   }`}
                 >
                   <item.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                  <span className="whitespace-nowrap">{item.label}</span>
+                  {(!isSidebarCollapsed) && (
+                    <span className="whitespace-nowrap animate-fadeIn">{item.label}</span>
+                  )}
                 </button>
               );
             })}
@@ -553,35 +607,46 @@ export default function App() {
         </div>
 
         {/* User Info & Sign out */}
-        <div className="p-6 border-t border-slate-800 space-y-4">
+        <div className={`p-6 border-t border-slate-800 space-y-4 ${
+          isSidebarCollapsed ? 'md:p-3 md:flex md:flex-col md:items-center' : ''
+        }`}>
           <button
             onClick={() => setIsMfaSettingsOpen(true)}
-            className="w-full flex items-center justify-between p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 hover:bg-slate-850/50 text-left transition cursor-pointer group"
+            className={`w-full flex items-center justify-between p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 hover:bg-slate-850/50 text-left transition cursor-pointer group ${
+              isSidebarCollapsed ? 'md:p-1.5 md:justify-center md:border-none md:hover:bg-transparent' : ''
+            }`}
             title="Paramètres de sécurité & MFA"
           >
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="w-9 h-9 bg-slate-800 rounded-full border border-slate-700 flex items-center justify-center text-white font-bold text-xs uppercase shadow-inner shrink-0 group-hover:border-emerald-500 transition">
                 {currentUser.displayName ? currentUser.displayName[0] : currentUser.email ? currentUser.email[0] : '?'}
               </div>
-              <div className="overflow-hidden">
-                <p className="font-bold text-white text-xs truncate leading-normal">
-                  {currentUser.displayName || currentUser.email?.split('@')[0]}
-                </p>
-                <span className="inline-flex items-center gap-1 text-[9px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-emerald-400 transition mt-0.5">
-                  <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
-                  MFA / Sécurité
-                </span>
-              </div>
+              {!isSidebarCollapsed && (
+                <div className="overflow-hidden animate-fadeIn">
+                  <p className="font-bold text-white text-xs truncate leading-normal">
+                    {currentUser.displayName || currentUser.email?.split('@')[0]}
+                  </p>
+                  <span className="inline-flex items-center gap-1 text-[9px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-emerald-400 transition mt-0.5">
+                    <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
+                    MFA / Sécurité
+                  </span>
+                </div>
+              )}
             </div>
-            <Settings2 className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition shrink-0 ml-1" />
+            {!isSidebarCollapsed && (
+              <Settings2 className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition shrink-0 ml-1" />
+            )}
           </button>
 
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 border border-slate-800 hover:border-slate-700 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white font-semibold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer"
+            className={`w-full flex items-center justify-center gap-2 border border-slate-800 hover:border-slate-700 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white font-semibold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer ${
+              isSidebarCollapsed ? 'md:p-2.5 md:bg-transparent md:border-none md:hover:bg-slate-800' : ''
+            }`}
+            title="Se déconnecter"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Se déconnecter</span>
+            {!isSidebarCollapsed && <span>Se déconnecter</span>}
           </button>
         </div>
       </aside>

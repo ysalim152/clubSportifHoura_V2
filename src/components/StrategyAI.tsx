@@ -45,7 +45,7 @@ export default function StrategyAI({ club, members, payments, events, teams, cur
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Quick Action templates
   const quickPrompts = [
@@ -150,9 +150,11 @@ export default function StrategyAI({ club, members, payments, events, teams, cur
     ]);
   }, [club.id]);
 
-  // Scroll chat to bottom
+  // Scroll chat to bottom inside the inner container only
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
   }, [messages, isSendingMessage]);
 
   // Chat message sender
@@ -587,7 +589,7 @@ export default function StrategyAI({ club, members, payments, events, teams, cur
             </div>
 
             {/* Chat Body & Thread Scrollable area */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
               <div className="space-y-4">
                 {messages.map(msg => {
                   const isAssistant = msg.role === 'assistant';
@@ -621,8 +623,6 @@ export default function StrategyAI({ club, members, payments, events, teams, cur
                     </div>
                   </div>
                 )}
-                
-                <div ref={chatBottomRef} />
               </div>
             </div>
 
