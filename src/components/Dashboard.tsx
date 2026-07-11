@@ -15,10 +15,11 @@ interface DashboardProps {
   payments: Payment[];
   onNavigate: (tab: string) => void;
   onOpenQuickAction: (action: string) => void;
+  currencySymbol?: string;
 }
 
 export default function Dashboard({ 
-  club, members, teams, events, payments, onNavigate, onOpenQuickAction 
+  club, members, teams, events, payments, onNavigate, onOpenQuickAction, currencySymbol = '€'
 }: DashboardProps) {
   
   const [memberDistType, setMemberDistType] = useState<'role' | 'age'>('role');
@@ -144,8 +145,8 @@ export default function Dashboard({
           },
           { 
             title: "Fonds Encaissés", 
-            value: `${totalCollected} €`, 
-            sub: `${totalPending} € en attente`,
+            value: `${totalCollected} ${currencySymbol}`, 
+            sub: `${totalPending} ${currencySymbol} en attente`,
             icon: CreditCard,
             color: "text-emerald-600 bg-emerald-50 border-emerald-100" 
           },
@@ -250,7 +251,7 @@ export default function Dashboard({
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => `${value} €`} />
+                    <Tooltip formatter={(value) => `${value} ${currencySymbol}`} />
                   </PieChart>
                 </ResponsiveContainer>
               )}
@@ -262,14 +263,14 @@ export default function Dashboard({
               <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
               <div>
                 <p className="text-xs text-slate-400 font-medium">Cotisations Payées</p>
-                <p className="font-extrabold text-sm text-slate-900">{totalCollected} €</p>
+                <p className="font-extrabold text-sm text-slate-900">{totalCollected} {currencySymbol}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
               <div>
                 <p className="text-xs text-slate-400 font-medium">En attente</p>
-                <p className="font-extrabold text-sm text-slate-900">{totalPending} €</p>
+                <p className="font-extrabold text-sm text-slate-900">{totalPending} {currencySymbol}</p>
               </div>
             </div>
           </div>

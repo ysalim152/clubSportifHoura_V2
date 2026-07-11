@@ -16,6 +16,7 @@ interface StrategyAIProps {
   payments: Payment[];
   events: Event[];
   teams: Team[];
+  currencySymbol?: string;
 }
 
 interface SWOTReport {
@@ -34,7 +35,7 @@ interface ChatMessage {
   createdAt: string;
 }
 
-export default function StrategyAI({ club, members, payments, events, teams }: StrategyAIProps) {
+export default function StrategyAI({ club, members, payments, events, teams, currencySymbol = '€' }: StrategyAIProps) {
   const [swot, setSwot] = useState<SWOTReport | null>(null);
   const [isGeneratingSwot, setIsGeneratingSwot] = useState(false);
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -382,7 +383,7 @@ export default function StrategyAI({ club, members, payments, events, teams }: S
         {[
           { label: "Membres Analysés", value: `${totalMembers} licenciés`, color: "border-slate-200" },
           { label: "Indice d'Assiduité", value: `${avgAttendance}% global`, color: "border-slate-200" },
-          { label: "Ratio Finances", value: `${totalIncome} € / ${totalExpenses} €`, color: "border-slate-200" },
+          { label: "Ratio Finances", value: `${totalIncome} ${currencySymbol} / ${totalExpenses} ${currencySymbol}`, color: "border-slate-200" },
           { label: "Conformité administrative", value: `${complianceRate}% validé`, color: complianceRate < 80 ? "border-rose-300 bg-rose-50/50" : "border-slate-200" }
         ].map((s, idx) => (
           <div key={idx} className={`bg-white border rounded-2xl p-4 shadow-sm ${s.color}`}>

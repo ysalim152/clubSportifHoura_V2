@@ -16,10 +16,11 @@ interface UserProfileManagerProps {
   userProfile: any;
   onOpenMfaSettings: () => void;
   onRefreshClubData?: () => void;
+  currencySymbol?: string;
 }
 
 export default function UserProfileManager({ 
-  club, currentUser, userProfile, onOpenMfaSettings, onRefreshClubData 
+  club, currentUser, userProfile, onOpenMfaSettings, onRefreshClubData, currencySymbol = '€'
 }: UserProfileManagerProps) {
   
   const [member, setMember] = useState<Member | null>(null);
@@ -497,7 +498,7 @@ export default function UserProfileManager({
             <div className="p-4 rounded-xl border flex justify-between items-center bg-slate-50/50">
               <div>
                 <span className="block text-[10px] font-bold text-slate-400 uppercase">Tarif Cotisation</span>
-                <span className="text-xl font-black text-slate-800">{member?.membershipAmount || 150} €</span>
+                <span className="text-xl font-black text-slate-800">{member?.membershipAmount || 150} {currencySymbol}</span>
               </div>
               <div>
                 {member?.membershipPaid ? (
@@ -514,7 +515,7 @@ export default function UserProfileManager({
             </div>
             {!member?.membershipPaid && (
               <p className="text-[11px] text-slate-500 italic leading-relaxed">
-                Veuillez vous rapprocher d'un administrateur ou trésorier du club pour régler votre cotisation de {member?.membershipAmount || 150} € afin de valider définitivement votre licence de jeu.
+                Veuillez vous rapprocher d'un administrateur ou trésorier du club pour régler votre cotisation de {member?.membershipAmount || 150} {currencySymbol} afin de valider définitivement votre licence de jeu.
               </p>
             )}
           </div>

@@ -3,11 +3,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   CreditCard, DollarSign, Plus, Search, Filter, ShieldAlert, Check, X, 
   ChevronRight, Calendar, User, TrendingUp, RefreshCw, Layers,
-  Receipt, Printer, Download, FileText, Trash2, TrendingDown
+  Receipt, Printer, Download, FileText, Trash2, TrendingDown, FileDown, Users
 } from 'lucide-react';
 import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, sanitizeData } from '../firebase';
-import { Club, Payment, Member, Expense } from '../types';
+import { Club, Payment, Member, Expense, Event } from '../types';
 import ReceiptModal from './ReceiptModal';
 
 interface FinanceManagerProps {
@@ -17,10 +17,12 @@ interface FinanceManagerProps {
   onRefresh: () => void;
   quickAction: string | null;
   clearQuickAction: () => void;
+  currencySymbol?: string;
+  events?: Event[];
 }
 
 export default function FinanceManager({ 
-  club, payments, members, onRefresh, quickAction, clearQuickAction 
+  club, payments, members, onRefresh, quickAction, clearQuickAction, currencySymbol = '€', events = []
 }: FinanceManagerProps) {
   // Navigation tabs: 'payments' | 'expenses'
   const [activeTab, setActiveTab] = useState<'payments' | 'expenses'>('payments');
@@ -91,6 +93,167 @@ export default function FinanceManager({
       clearQuickAction();
     }
   }, [quickAction]);
+
+  const exportToCSV = (headers: string[], rows: string[][], filename: string) => {
+    const escapeField = (field: any) => {
+      if (field === null || field === undefined) return '';
+      const stringified = String(field);
+      return `"${stringified.replace(/"/g, '""')}"`;
+    };
+
+    const csvContent = [
+      headers.map(escapeField).join(';'),
+      ...rows.map(row => row.map(escapeField).join(';'))
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportPaymentsCSV = () => {
+    const headers = [
+      'ID', 'Membre', 'Montant', 'Statut', 'Méthode de Paiement', 'Description', 'Date'
+    ];
+
+    const rows = payments.map(p => {
+      const m = members.find(member => member.id === p.memberId);
+      const memberName = m ? `${m.lastName} ${m.firstName}` : 'Membre inconnu';
+      const methodLabel = p.paymentMethod === 'card' ? 'Carte bancaire' 
+        : p.paymentMethod === 'cash' ? 'Espèces' 
+        : p.paymentMethod === 'check' ? 'Chèque' 
+        : p.paymentMethod === 'bank_transfer' ? 'Virement bancaire' 
+        : '';
+
+      return [
+        p.id,
+        memberName,
+        String(p.amount),
+        p.status === 'paid' ? 'Payé' : p.status === 'pending' ? 'En attente' : 'Échoué',
+        methodLabel,
+        p.description || '',
+        p.date ? new Date(p.date).toLocaleDateString('fr-FR') : ''
+      ];
+    });
+
+    exportToCSV(headers, rows, `paiements_${club.name.toLowerCase().replace(/\s+/g, '_')}.csv`);
+  };
+
+  const handleExportExpensesCSV = () => {
+    const headers = [
+      'ID', 'Titre', 'Montant', 'Catégorie', 'Description', 'Date'
+    ];
+
+    const rows = expenses.map(exp => [
+      exp.id,
+      exp.title || '',
+      String(exp.amount),
+      exp.category === 'equipment' ? 'Équipement' : exp.category === 'transport' ? 'Transport' : exp.category === 'referee' ? 'Arbitrage' : 'Autre',
+      exp.description || '',
+      exp.date ? new Date(exp.date).toLocaleDateString('fr-FR') : ''
+    ]);
+
+    exportToCSV(headers, rows, `depenses_${club.name.toLowerCase().replace(/\s+/g, '_')}.csv`);
+  };
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'admin': return 'Administrateur';
+      case 'president': return "Président de l'association";
+      case 'vice_president_1': return "1er Vice-président";
+      case 'vice_president_2': return "2e Vice-président";
+      case 'sec_general': return 'Secrétaire Général';
+      case 'tresorier': return 'Trésorier';
+      case 'membre_actif': return 'Membre Actif';
+      case 'adherent': return 'Adhérent';
+      case 'player': return 'Joueur';
+      case 'visiteur': return 'Visiteur';
+      case 'coach': return 'Coach / Entraîneur';
+      default: return role;
+    }
+  };
+
+  const getAgeCategory = (birthDateString: string | undefined): string => {
+    if (!birthDateString) return 'Non renseigné';
+    const birthDate = new Date(birthDateString);
+    if (isNaN(birthDate.getTime())) return 'Non renseigné';
+    
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+
+    if (age < 7) return 'U7 (<7 ans)';
+    if (age < 9) return 'U9 (7-8)';
+    if (age < 11) return 'U11 (9-10)';
+    if (age < 13) return 'U13 (11-12)';
+    if (age < 15) return 'U15 (13-14)';
+    if (age < 18) return 'U18 (15-17)';
+    if (age < 35) return 'Seniors';
+    return 'Vétérans';
+  };
+
+  const handleExportMembersCSV = () => {
+    const headers = [
+      'ID', 'Nom', 'Prénom', 'Rôle', 'Email', 'Téléphone', 'N° Licence', 
+      'Date de Naissance', 'Catégorie d\'âge', 'Cotisation Payée', 
+      'Montant Cotisation', 'Taille Équipement', 'Certificat Médical', 
+      'Fiche d\'Inscription', 'Autorisation Parentale', 'Charte Signée', 'Date d\'Inscription'
+    ];
+
+    const rows = members.map(m => [
+      m.id,
+      m.lastName || '',
+      m.firstName || '',
+      getRoleLabel(m.role),
+      m.email || '',
+      m.phone || '',
+      m.licenseNumber || '',
+      m.birthDate || '',
+      getAgeCategory(m.birthDate),
+      m.membershipPaid ? 'Oui' : 'Non',
+      String(m.membershipAmount || 0),
+      m.equipmentSize || '',
+      m.medicalCertStatus === 'valid' ? 'Valide' : m.medicalCertStatus === 'renew' ? 'À renouveler' : 'Manquant',
+      m.registrationFormStatus === 'valid' ? 'Valide' : m.registrationFormStatus === 'renew' ? 'À renouveler' : 'Manquant',
+      m.parentalAuthStatus === 'valid' ? 'Valide' : m.parentalAuthStatus === 'renew' ? 'À renouveler' : 'Manquant',
+      m.charterSigned ? 'Oui' : 'Non',
+      m.createdAt ? new Date(m.createdAt).toLocaleDateString('fr-FR') : ''
+    ]);
+
+    exportToCSV(headers, rows, `membres_${club.name.toLowerCase().replace(/\s+/g, '_')}.csv`);
+  };
+
+  const handleExportEventsCSV = () => {
+    const headers = [
+      'ID', 'Titre', 'Type', 'Date de Début', 'Date de Fin', 'Lieu', 
+      'Adversaire', 'Statut Convocations', 'Score Domicile', 'Score Extérieur', 'Détails'
+    ];
+
+    const rows = (events || []).map(e => [
+      e.id,
+      e.title || '',
+      e.type === 'match' ? 'Match' : e.type === 'training' ? 'Entraînement' : e.type === 'tournament' ? 'Tournoi' : 'Autre',
+      e.start ? new Date(e.start).toLocaleString('fr-FR') : '',
+      e.end ? new Date(e.end).toLocaleString('fr-FR') : '',
+      e.location || '',
+      e.opponent || '',
+      e.convocationStatus === 'draft' ? 'Brouillon' : e.convocationStatus === 'sent' ? 'Envoyé' : 'Fermé',
+      e.scoreHome !== undefined && e.scoreHome !== null ? String(e.scoreHome) : '',
+      e.scoreAway !== undefined && e.scoreAway !== null ? String(e.scoreAway) : '',
+      e.details || ''
+    ]);
+
+    exportToCSV(headers, rows, `evenements_${club.name.toLowerCase().replace(/\s+/g, '_')}.csv`);
+  };
 
   // Statistics calculation
   const totalCollected = payments
@@ -310,9 +473,9 @@ export default function FinanceManager({
         <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Cotisations Encaissées</p>
-            <h3 className="text-3xl font-black text-emerald-600">{totalCollected.toFixed(2)} €</h3>
+            <h3 className="text-3xl font-black text-emerald-600">{totalCollected.toFixed(2)} {currencySymbol}</h3>
             <p className="text-xs text-slate-400 font-medium">
-              En attente : <span className="font-bold text-amber-600">{totalPending} €</span> | Rejetés : <span className="font-bold text-red-500">{totalFailed} €</span>
+              En attente : <span className="font-bold text-amber-600">{totalPending} {currencySymbol}</span> | Rejetés : <span className="font-bold text-red-500">{totalFailed} {currencySymbol}</span>
             </p>
           </div>
           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center border border-emerald-100 shrink-0">
@@ -324,7 +487,7 @@ export default function FinanceManager({
         <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total des Dépenses</p>
-            <h3 className="text-3xl font-black text-rose-600">{totalExpenses.toFixed(2)} €</h3>
+            <h3 className="text-3xl font-black text-rose-600">{totalExpenses.toFixed(2)} {currencySymbol}</h3>
             <p className="text-xs text-slate-400 font-medium">{expenses.length} justificatifs enregistrés</p>
           </div>
           <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center border border-rose-100 shrink-0">
@@ -339,7 +502,7 @@ export default function FinanceManager({
           <div className="space-y-1">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Bilan Net (Trésorerie)</p>
             <h3 className={`text-3xl font-black ${netBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-              {netBalance >= 0 ? '+' : ''}{netBalance.toFixed(2)} €
+              {netBalance >= 0 ? '+' : ''}{netBalance.toFixed(2)} {currencySymbol}
             </h3>
             <p className="text-xs text-slate-400 font-medium">Solde de l'exercice en cours</p>
           </div>
@@ -404,15 +567,45 @@ export default function FinanceManager({
               className="space-y-6"
             >
               {/* Header / Actions */}
-              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
+              <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-4">
                 <div>
                   <h3 className="font-bold text-slate-900 text-lg">Suivi des Règlements</h3>
                   <p className="text-xs text-slate-400">Suivez, validez et générez les justificatifs de cotisation pour les adhérents.</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleExportPaymentsCSV}
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm px-3 py-2.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                    title="Exporter tous les règlements en format CSV / Excel"
+                  >
+                    <FileDown className="w-4 h-4 text-emerald-600" />
+                    <span>Exporter Paiements</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportMembersCSV}
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm px-3 py-2.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                    title="Exporter la liste complète des membres en format CSV / Excel"
+                  >
+                    <Users className="w-4 h-4 text-emerald-600" />
+                    <span>Membres</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportEventsCSV}
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm px-3 py-2.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                    title="Exporter la liste des événements en format CSV / Excel"
+                  >
+                    <Calendar className="w-4 h-4 text-emerald-600" />
+                    <span>Événements</span>
+                  </button>
+
                   <button
                     onClick={() => setShowPaymentForm(true)}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition cursor-pointer"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition cursor-pointer whitespace-nowrap"
                   >
                     <Plus className="w-4 h-4" />
                     Saisir un Paiement
@@ -469,7 +662,7 @@ export default function FinanceManager({
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-600 uppercase">Montant de la cotisation (€)</label>
+                      <label className="text-xs font-bold text-slate-600 uppercase">Montant de la cotisation ({currencySymbol})</label>
                       <input
                         type="number"
                         required
@@ -637,7 +830,7 @@ export default function FinanceManager({
                                 )}
                               </td>
                               <td className="px-6 py-4 font-extrabold text-slate-900">
-                                {p.amount} €
+                                {p.amount} {currencySymbol}
                               </td>
                               <td className="px-6 py-4">
                                 <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg ${
@@ -695,15 +888,45 @@ export default function FinanceManager({
               className="space-y-6"
             >
               {/* Header / Actions */}
-              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
+              <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-4">
                 <div>
                   <h3 className="font-bold text-slate-900 text-lg">Registre des Dépenses</h3>
                   <p className="text-xs text-slate-400">Enregistrez et contrôlez tous les frais de l'association (matériel, déplacements, arbitrage, etc.).</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleExportExpensesCSV}
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                    title="Exporter le registre des dépenses en format CSV / Excel"
+                  >
+                    <FileDown className="w-4 h-4 text-rose-600" />
+                    <span>Exporter Dépenses</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportPaymentsCSV}
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                    title="Exporter tous les règlements en format CSV / Excel"
+                  >
+                    <CreditCard className="w-4 h-4 text-emerald-600" />
+                    <span>Paiements</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportMembersCSV}
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                    title="Exporter la liste complète des membres en format CSV / Excel"
+                  >
+                    <Users className="w-4 h-4 text-emerald-600" />
+                    <span>Membres</span>
+                  </button>
+
                   <button
                     onClick={() => setShowExpenseForm(true)}
-                    className="bg-rose-600 hover:bg-rose-500 text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition cursor-pointer"
+                    className="bg-rose-600 hover:bg-rose-500 text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition cursor-pointer whitespace-nowrap"
                   >
                     <Plus className="w-4 h-4" />
                     Enregistrer une Dépense
@@ -739,7 +962,7 @@ export default function FinanceManager({
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-600 uppercase">Montant TTC (€)</label>
+                      <label className="text-xs font-bold text-slate-600 uppercase">Montant TTC ({currencySymbol})</label>
                       <input
                         type="number"
                         required
@@ -884,7 +1107,7 @@ export default function FinanceManager({
                                 {e.description || "Aucun détail"}
                               </td>
                               <td className="px-6 py-4 font-extrabold text-rose-600">
-                                - {e.amount.toFixed(2)} €
+                                - {e.amount.toFixed(2)} {currencySymbol}
                               </td>
                               <td className="px-6 py-4 text-right">
                                 <button
@@ -915,6 +1138,7 @@ export default function FinanceManager({
           member={members.find(m => m.id === selectedPaymentForReceipt.memberId)!}
           club={club}
           onClose={() => setSelectedPaymentForReceipt(null)}
+          currencySymbol={currencySymbol}
         />
       )}
     </div>

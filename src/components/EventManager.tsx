@@ -7,7 +7,8 @@ import {
   Plus as PlusIcon, Calendar as CalendarIcon, Clock as ClockIcon, 
   MapPin as MapPinIcon, Check as CheckIcon, X as XIcon, Trash2 as TrashIcon, 
   Award as AwardIcon, CheckSquare, Sparkles, Smile, ChevronRight, ChevronLeft,
-  Trophy, Star, Percent, Flame, Activity, Users, Search, Share2, Sliders, Grid, List, Clipboard
+  Trophy, Star, Percent, Flame, Activity, Users, Search, Share2, Sliders, Grid, List, Clipboard,
+  FileDown
 } from 'lucide-react';
 
 interface EventManagerProps {
@@ -227,6 +228,100 @@ export default function EventManager({
       clearQuickAction();
     }
   }, [quickAction]);
+
+  const generateICSFile = (eventsList: Event[], filename: string) => {
+    const escapeField = (str: string | undefined) => {
+      if (!str) return '';
+      return str
+        .replace(/\\/g, '\\\\')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,')
+        .replace(/\n/g, '\\n');
+    };
+
+    const formatToICSDate = (dateStr: string): string => {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      return d.getUTCFullYear().toString() +
+        String(d.getUTCMonth() + 1).padStart(2, '0') +
+        String(d.getUTCDate()).padStart(2, '0') +
+        'T' +
+        String(d.getUTCHours()).padStart(2, '0') +
+        String(d.getUTCMinutes()).padStart(2, '0') +
+        '00Z';
+    };
+
+    let icsContent = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//HouraSports//NONSGML Calendar//FR',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH'
+    ];
+
+    eventsList.forEach(evt => {
+      const dtStamp = formatToICSDate(evt.createdAt || new Date().toISOString());
+      const dtStart = formatToICSDate(evt.start);
+      const dtEnd = formatToICSDate(evt.end || evt.start);
+
+      if (!dtStart) return;
+
+      const summary = evt.type === 'match' && evt.opponent 
+        ? `${evt.title} vs ${evt.opponent}` 
+        : evt.title;
+
+      let descriptionParts = [
+        `Type: ${evt.type === 'match' ? 'Match' : evt.type === 'training' ? 'Entraînement' : evt.type === 'tournament' ? 'Tournoi' : 'Autre'}`,
+      ];
+      if (evt.opponent) {
+        descriptionParts.push(`Adversaire: ${evt.opponent}`);
+      }
+      if (evt.location) {
+        descriptionParts.push(`Lieu: ${evt.location}`);
+      }
+      if (evt.details) {
+        descriptionParts.push(`Détails: ${evt.details}`);
+      }
+      const description = descriptionParts.join('\\n');
+
+      icsContent.push('BEGIN:VEVENT');
+      icsContent.push(`UID:event_${evt.id}@hourasports.com`);
+      icsContent.push(`DTSTAMP:${dtStamp}`);
+      icsContent.push(`DTSTART:${dtStart}`);
+      icsContent.push(`DTEND:${dtEnd}`);
+      icsContent.push(`SUMMARY:${escapeField(summary)}`);
+      if (description) {
+        icsContent.push(`DESCRIPTION:${escapeField(description)}`);
+      }
+      if (evt.location) {
+        icsContent.push(`LOCATION:${escapeField(evt.location)}`);
+      }
+      icsContent.push('END:VEVENT');
+    });
+
+    icsContent.push('END:VCALENDAR');
+
+    const fullContent = icsContent.join('\r\n');
+    const blob = new Blob([fullContent], { type: 'text/calendar;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportCalendarICS = () => {
+    const filename = `calendrier_${club.name.toLowerCase().replace(/\s+/g, '_')}.ics`;
+    generateICSFile(filteredEvents, filename);
+  };
+
+  const handleExportSingleEventICS = (evt: Event) => {
+    const filename = `evenement_${evt.title.toLowerCase().replace(/\s+/g, '_')}.ics`;
+    generateICSFile([evt], filename);
+  };
 
   // Synchronize Report Form whenever convocations or selectedEvent or stats change
   useEffect(() => {
@@ -845,7 +940,7 @@ export default function EventManager({
                   </h3>
                   <p className="text-xs text-slate-400">Planification des activités, gestion d'effectifs et résultats.</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {/* View Toggle */}
                   <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                     <button
@@ -868,10 +963,19 @@ export default function EventManager({
                     </button>
                   </div>
 
+                  <button
+                    onClick={handleExportCalendarICS}
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-sm px-4 py-2 rounded-xl shadow-sm flex items-center gap-2 transition cursor-pointer"
+                    title="Exporter le calendrier filtré ou complet au format .ics (Google Calendar / Outlook / Apple Calendar)"
+                  >
+                    <FileDown className="w-4 h-4 text-emerald-600" />
+                    <span>Exporter ICS</span>
+                  </button>
+
                   {canManage && (
                     <button
                       onClick={() => setShowEventForm(true)}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm px-4 py-2 rounded-xl shadow-md shadow-emerald-600/10 flex items-center gap-2 transition cursor-pointer"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm px-4 py-2 rounded-xl shadow-md shadow-emerald-600/10 flex items-center gap-2 transition cursor-pointer whitespace-nowrap"
                     >
                       <PlusIcon className="w-4 h-4" />
                       Créer un événement
@@ -1267,9 +1371,19 @@ export default function EventManager({
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6 sticky top-6">
                 {selectedEvent ? (
                   <div className="space-y-6">
-                    <div>
-                      <h4 className="font-extrabold text-slate-900 text-lg leading-tight">{selectedEvent.title}</h4>
-                      <p className="text-xs text-slate-400 mt-1 truncate">Gestion de l'effectif & feuille de match</p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h4 className="font-extrabold text-slate-900 text-lg leading-tight">{selectedEvent.title}</h4>
+                        <p className="text-xs text-slate-400 mt-1">Gestion de l'effectif & feuille de match</p>
+                      </div>
+                      <button
+                        onClick={() => handleExportSingleEventICS(selectedEvent)}
+                        className="text-[11px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-1.5 cursor-pointer bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-xl transition border border-emerald-100 shrink-0 shadow-sm"
+                        title="Exporter cet événement au format .ics (Google Calendar / Outlook)"
+                      >
+                        <CalendarIcon className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Exporter ICS</span>
+                      </button>
                     </div>
 
                     {/* Sub Tab Selector if event is a match */}

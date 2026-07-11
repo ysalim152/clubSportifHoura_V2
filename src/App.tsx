@@ -38,6 +38,7 @@ export default function App() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [selectedClub, setSelectedClub] = useState<Club | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [currencySymbol, setCurrencySymbol] = useState('Da');
   const [isMfaVerified, setIsMfaVerified] = useState(false);
   const [isMfaSettingsOpen, setIsMfaSettingsOpen] = useState(false);
   const [hasMfaEnabled, setHasMfaEnabled] = useState(false);
@@ -231,10 +232,11 @@ export default function App() {
     }
   }, [selectedClub]);
 
-  // Listen to club settings (including dark mode) dynamically
+  // Listen to club settings (including dark mode & currency) dynamically
   useEffect(() => {
     if (!selectedClub) {
       setIsDarkMode(false);
+      setCurrencySymbol('Da');
       document.documentElement.classList.remove('dark');
       return;
     }
@@ -250,8 +252,20 @@ export default function App() {
         } else {
           document.documentElement.classList.remove('dark');
         }
+
+        // Set currency symbol
+        const rawCurrency = data?.appearance?.currency || 'Da';
+        let symbol = 'Da';
+        if (rawCurrency === 'Da' || rawCurrency === 'DA') {
+          symbol = 'Da';
+        } else {
+          const match = rawCurrency.match(/\(([^)]+)\)/);
+          symbol = match ? match[1] : 'Da';
+        }
+        setCurrencySymbol(symbol);
       } else {
         setIsDarkMode(false);
+        setCurrencySymbol('Da');
         document.documentElement.classList.remove('dark');
       }
     }, (error) => {
@@ -607,6 +621,7 @@ export default function App() {
                     payments={payments}
                     onNavigate={(tab) => setActiveTab(tab)}
                     onOpenQuickAction={handleOpenQuickAction}
+                    currencySymbol={currencySymbol}
                   />
                 )}
 
@@ -618,6 +633,9 @@ export default function App() {
                     onRefresh={fetchClubData}
                     quickAction={quickAction}
                     clearQuickAction={() => setQuickAction(null)}
+                    currencySymbol={currencySymbol}
+                    events={events}
+                    payments={payments}
                   />
                 )}
 
@@ -641,6 +659,8 @@ export default function App() {
                     onRefresh={fetchClubData}
                     quickAction={quickAction}
                     clearQuickAction={() => setQuickAction(null)}
+                    currencySymbol={currencySymbol}
+                    events={events}
                   />
                 )}
 
@@ -658,6 +678,7 @@ export default function App() {
                     payments={payments}
                     events={events}
                     teams={teams}
+                    currencySymbol={currencySymbol}
                   />
                 )}
 
@@ -672,6 +693,7 @@ export default function App() {
                     userProfile={userProfile}
                     onOpenMfaSettings={() => setIsMfaSettingsOpen(true)}
                     onRefreshClubData={fetchClubData}
+                    currencySymbol={currencySymbol}
                   />
                 )}
 

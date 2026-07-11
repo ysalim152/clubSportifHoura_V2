@@ -7,10 +7,12 @@ interface ReceiptModalProps {
   member: Member;
   club: Club;
   onClose: () => void;
+  currencySymbol?: string;
 }
 
-export default function ReceiptModal({ payment, member, club, onClose }: ReceiptModalProps) {
+export default function ReceiptModal({ payment, member, club, onClose, currencySymbol = '€' }: ReceiptModalProps) {
   const receiptNumber = `RE-${new Date(payment.date).getFullYear()}-${payment.id.substring(4).toUpperCase()}`;
+  const spelledCurrency = currencySymbol === 'Da' ? 'Dinars' : (currencySymbol === '$' ? 'Dollars' : 'Euros');
   
   const handlePrint = () => {
     // Dynamically inject print style to hide everything else in the application
@@ -166,7 +168,7 @@ export default function ReceiptModal({ payment, member, club, onClose }: Receipt
                 </p>
               </div>
               <p>
-                A réglé la somme de <strong>{payment.amount} €</strong> (en toutes lettres : <em>{payment.amount} Euros</em>) au titre de son adhésion annuelle et de sa cotisation de licence pour la saison en cours.
+                A réglé la somme de <strong>{payment.amount} {currencySymbol}</strong> (en toutes lettres : <em>{payment.amount} {spelledCurrency}</em>) au titre de son adhésion annuelle et de sa cotisation de licence pour la saison en cours.
               </p>
             </div>
 
@@ -189,12 +191,12 @@ export default function ReceiptModal({ payment, member, club, onClose }: Receipt
                       {paymentMethodLabel}
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-slate-900">
-                      {payment.amount.toFixed(2)} €
+                      {payment.amount.toFixed(2)} {currencySymbol}
                     </td>
                   </tr>
                   <tr className="bg-slate-50 font-bold text-slate-900">
                     <td colSpan={2} className="px-4 py-2.5 text-right uppercase">Net perçu :</td>
-                    <td className="px-4 py-2.5 text-right text-emerald-600 font-black text-sm">{payment.amount.toFixed(2)} €</td>
+                    <td className="px-4 py-2.5 text-right text-emerald-600 font-black text-sm">{payment.amount.toFixed(2)} {currencySymbol}</td>
                   </tr>
                 </tbody>
               </table>

@@ -191,7 +191,7 @@ export default function AuthScreen({ onLoginSuccess, isLoading, setIsLoading, er
               Gérez votre club de sport en toute simplicité.
             </h2>
             <p className="text-lg text-slate-600 leading-relaxed">
-              Une solution tout-en-un inspirée de SportEasy, AssoConnect et MonClub pour centraliser vos effectifs, vos événements et vos finances.
+              Une solution de gestion administrative, gestion des finances, organisation des événements, centralisation des effectifs et coordination des équipes bénévoles.
             </p>
           </motion.div>
 

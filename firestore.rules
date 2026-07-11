@@ -88,7 +88,24 @@ service cloud.firestore {
                          (exists(/databases/$(database)/documents/clubs/$(clubId)) && get(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid) ||
                          (existsAfter(/databases/$(database)/documents/clubs/$(clubId)) && getAfter(/databases/$(database)/documents/clubs/$(clubId)).data.createdBy == request.auth.uid) ||
                          isClubAdmin(clubId) ||
-                         (memberId == request.auth.uid && request.resource.data.role == 'admin') // Allow first creator to sign up as admin
+                         (memberId == request.auth.uid && request.resource.data.role == 'admin') || // Allow first creator to sign up as admin
+                         (
+                           memberId == request.auth.uid &&
+                           exists(/databases/$(database)/documents/clubs/$(clubId)/settings/system) &&
+                           (
+                             (request.resource.data.role == 'admin' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.adminCode) ||
+                             (request.resource.data.role == 'coach' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.coachCode) ||
+                             (request.resource.data.role == 'president' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.presidentCode) ||
+                             (request.resource.data.role == 'vice_president_1' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.vicePresident1Code) ||
+                             (request.resource.data.role == 'vice_president_2' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.vicePresident2Code) ||
+                             (request.resource.data.role == 'sec_general' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.secGeneralCode) ||
+                             (request.resource.data.role == 'tresorier' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.tresorierCode) ||
+                             (request.resource.data.role == 'membre_actif' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.membreActifCode) ||
+                             (request.resource.data.role == 'adherent' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.adherentCode) ||
+                             (request.resource.data.role == 'player' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.playerCode) ||
+                             (request.resource.data.role == 'visiteur' && request.resource.data.registrationCode == get(/databases/$(database)/documents/clubs/$(clubId)/settings/system).data.registration.visiteurCode)
+                           )
+                         )
                        ) &&
                        request.resource.data.clubId == clubId &&
                        request.resource.data.firstName is string && request.resource.data.firstName.size() <= 50 &&

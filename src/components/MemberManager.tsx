@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { collection, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, sanitizeData } from '../firebase';
-import { Club, Member, Team, UserRole } from '../types';
+import { Club, Member, Team, UserRole, Event, Payment } from '../types';
 import { generateRegistrationFormPDF, generateParentalAuthPDF, generateCharterSignaturePDF } from '../utils/pdfGenerator';
 
 interface MemberManagerProps {
@@ -18,10 +18,13 @@ interface MemberManagerProps {
   onRefresh: () => void;
   quickAction: string | null;
   clearQuickAction: () => void;
+  currencySymbol?: string;
+  events?: Event[];
+  payments?: Payment[];
 }
 
 export default function MemberManager({ 
-  club, members, teams, onRefresh, quickAction, clearQuickAction 
+  club, members, teams, onRefresh, quickAction, clearQuickAction, currencySymbol = '€', events = [], payments = []
 }: MemberManagerProps) {
   const getRoleDisplay = (role: string) => {
     switch (role) {
@@ -142,17 +145,17 @@ export default function MemberManager({
       if (tone === 'friendly') {
         return {
           subject: `💳 Ta cotisation club chez ${club.name} 😊`,
-          body: `Salut ${m.firstName},\n\nJ'espère que tu vas bien et que tu t'éclates aux entraînements ! ⚽\n\nPour finaliser ton inscription et nous aider à financer les équipements de la saison, il ne reste plus qu'à régler ta cotisation de ${amount} €.\n\nTu peux effectuer le paiement par carte sur l'app, ou déposer un chèque/espèces auprès de ton coach.\n\nUn grand merci pour ton aide et à très vite sur les terrains !\nL'équipe ${club.name}`
+          body: `Salut ${m.firstName},\n\nJ'espère que tu vas bien et que tu t'éclates aux entraînements ! ⚽\n\nPour finaliser ton inscription et nous aider à financer les équipements de la saison, il ne reste plus qu'à régler ta cotisation de ${amount} ${currencySymbol}.\n\nTu peux effectuer le paiement par carte sur l'app, ou déposer un chèque/espèces auprès de ton coach.\n\nUn grand merci pour ton aide et à très vite sur les terrains !\nL'équipe ${club.name}`
         };
       } else if (tone === 'professional') {
         return {
           subject: `Rappel de règlement : Cotisation annuelle ${club.name}`,
-          body: `Bonjour ${m.firstName},\n\nNous vous contactons dans le cadre du suivi administratif de votre adhésion au sein du club ${club.name} pour la saison en cours.\n\nÀ ce jour, le règlement de votre cotisation annuelle d'un montant de ${amount} € n'a pas encore été enregistré.\n\nNous vous invitons à régulariser cette situation dans les meilleurs délais soit en effectuant le paiement en ligne depuis votre espace personnel, soit en remettant votre chèque ou règlement en espèces au secrétariat.\n\nNous vous remercions par avance de votre diligence.\n\nCordialement,\nLe trésorier de ${club.name}`
+          body: `Bonjour ${m.firstName},\n\nNous vous contactons dans le cadre du suivi administratif de votre adhésion au sein du club ${club.name} pour la saison en cours.\n\nÀ ce jour, le règlement de votre cotisation annuelle d'un montant de ${amount} ${currencySymbol} n'a pas encore été enregistré.\n\nNous vous invitons à régulariser cette situation dans les meilleurs délais soit en effectuant le paiement en ligne depuis votre espace personnel, soit en remettant votre chèque ou règlement en espèces au secrétariat.\n\nNous vous remercions par avance de votre diligence.\n\nCordialement,\nLe trésorier de ${club.name}`
         };
       } else {
         return {
           subject: `🔴 RAPPEL IMPORTANT : Cotisation impayée & suspension de licence - ${club.name}`,
-          body: `Bonjour ${m.firstName},\n\nSauf erreur ou omission de notre part, nous n'avons toujours pas reçu le règlement de votre cotisation annuelle de ${amount} € pour la saison en cours au club ${club.name}.\n\nPour rappel, le paiement de la cotisation est une condition légale d'obtention et de maintien de votre licence de jeu. Sans régularisation sous 48 heures, nous nous verrons dans l'obligation de suspendre temporairement votre participation aux matchs officiels et entraînements.\n\nMerci de procéder au règlement d'extrême urgence.\n\nLa direction financière de ${club.name}`
+          body: `Bonjour ${m.firstName},\n\nSauf erreur ou omission de notre part, nous n'avons toujours pas reçu le règlement de votre cotisation annuelle de ${amount} ${currencySymbol} pour la saison en cours au club ${club.name}.\n\nPour rappel, le paiement de la cotisation est une condition légale d'obtention et de maintien de votre licence de jeu. Sans régularisation sous 48 heures, nous nous verrons dans l'obligation de suspendre temporairement votre participation aux matchs officiels et entraînements.\n\nMerci de procéder au règlement d'extrême urgence.\n\nLa direction financière de ${club.name}`
         };
       }
     } else {
@@ -160,17 +163,17 @@ export default function MemberManager({
       if (tone === 'friendly') {
         return {
           subject: '',
-          body: `Salut ${m.firstName} ! Pense à régler ta cotisation de ${amount}€ pour finaliser ton inscription chez ${club.name}. Tu peux payer directement en ligne sur l'app ! Merci beaucoup ! 😄`
+          body: `Salut ${m.firstName} ! Pense à régler ta cotisation de ${amount}${currencySymbol} pour finaliser ton inscription chez ${club.name}. Tu peux payer directement en ligne sur l'app ! Merci beaucoup ! 😄`
         };
       } else if (tone === 'professional') {
         return {
           subject: '',
-          body: `Bonjour ${m.firstName}, votre cotisation club de ${amount}€ reste à régler. Merci de faire le nécessaire en ligne ou d'apporter votre paiement au bureau du club. Cordialement, le Trésorier ${club.name}.`
+          body: `Bonjour ${m.firstName}, votre cotisation club de ${amount}${currencySymbol} reste à régler. Merci de faire le nécessaire en ligne ou d'apporter votre paiement au bureau du club. Cordialement, le Trésorier ${club.name}.`
         };
       } else {
         return {
           subject: '',
-          body: `RAPPEL URGENT ${m.firstName} : Votre cotisation ${club.name} (${amount}€) est impayée. Sans règlement sous 48h, votre licence sera suspendue et l'accès aux terrains bloqué. Merci de régler d'urgence.`
+          body: `RAPPEL URGENT ${m.firstName} : Votre cotisation ${club.name} (${amount}${currencySymbol}) est impayée. Sans règlement sous 48h, votre licence sera suspendue et l'accès aux terrains bloqué. Merci de régler d'urgence.`
         };
       }
     }
@@ -242,6 +245,111 @@ export default function MemberManager({
     if (age < 18) return 'U18 (15-17)';
     if (age < 35) return 'Seniors';
     return 'Vétérans';
+  };
+
+  const exportToCSV = (headers: string[], rows: string[][], filename: string) => {
+    const escapeField = (field: any) => {
+      if (field === null || field === undefined) return '';
+      const stringified = String(field);
+      return `"${stringified.replace(/"/g, '""')}"`;
+    };
+
+    const csvContent = [
+      headers.map(escapeField).join(';'),
+      ...rows.map(row => row.map(escapeField).join(';'))
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportMembersCSV = () => {
+    const headers = [
+      'ID', 'Nom', 'Prénom', 'Rôle', 'Email', 'Téléphone', 'N° Licence', 
+      'Date de Naissance', 'Catégorie d\'âge', 'Cotisation Payée', 
+      'Montant Cotisation', 'Taille Équipement', 'Certificat Médical', 
+      'Fiche d\'Inscription', 'Autorisation Parentale', 'Charte Signée', 'Date d\'Inscription'
+    ];
+
+    const rows = members.map(m => [
+      m.id,
+      m.lastName || '',
+      m.firstName || '',
+      getRoleDisplay(m.role).label,
+      m.email || '',
+      m.phone || '',
+      m.licenseNumber || '',
+      m.birthDate || '',
+      getAgeCategory(m.birthDate),
+      m.membershipPaid ? 'Oui' : 'Non',
+      String(m.membershipAmount || 0),
+      m.equipmentSize || '',
+      m.medicalCertStatus === 'valid' ? 'Valide' : m.medicalCertStatus === 'renew' ? 'À renouveler' : 'Manquant',
+      m.registrationFormStatus === 'valid' ? 'Valide' : m.registrationFormStatus === 'renew' ? 'À renouveler' : 'Manquant',
+      m.parentalAuthStatus === 'valid' ? 'Valide' : m.parentalAuthStatus === 'renew' ? 'À renouveler' : 'Manquant',
+      m.charterSigned ? 'Oui' : 'Non',
+      m.createdAt ? new Date(m.createdAt).toLocaleDateString('fr-FR') : ''
+    ]);
+
+    exportToCSV(headers, rows, `membres_${club.name.toLowerCase().replace(/\s+/g, '_')}.csv`);
+  };
+
+  const handleExportEventsCSV = () => {
+    const headers = [
+      'ID', 'Titre', 'Type', 'Date de Début', 'Date de Fin', 'Lieu', 
+      'Adversaire', 'Statut Convocations', 'Score Domicile', 'Score Extérieur', 'Détails'
+    ];
+
+    const rows = (events || []).map(e => [
+      e.id,
+      e.title || '',
+      e.type === 'match' ? 'Match' : e.type === 'training' ? 'Entraînement' : e.type === 'tournament' ? 'Tournoi' : 'Autre',
+      e.start ? new Date(e.start).toLocaleString('fr-FR') : '',
+      e.end ? new Date(e.end).toLocaleString('fr-FR') : '',
+      e.location || '',
+      e.opponent || '',
+      e.convocationStatus === 'draft' ? 'Brouillon' : e.convocationStatus === 'sent' ? 'Envoyé' : 'Fermé',
+      e.scoreHome !== undefined && e.scoreHome !== null ? String(e.scoreHome) : '',
+      e.scoreAway !== undefined && e.scoreAway !== null ? String(e.scoreAway) : '',
+      e.details || ''
+    ]);
+
+    exportToCSV(headers, rows, `evenements_${club.name.toLowerCase().replace(/\s+/g, '_')}.csv`);
+  };
+
+  const handleExportPaymentsCSV = () => {
+    const headers = [
+      'ID', 'Membre', 'Montant', 'Statut', 'Méthode de Paiement', 'Description', 'Date'
+    ];
+
+    const rows = (payments || []).map(p => {
+      const m = members.find(member => member.id === p.memberId);
+      const memberName = m ? `${m.lastName} ${m.firstName}` : 'Membre inconnu';
+      const methodLabel = p.paymentMethod === 'card' ? 'Carte bancaire' 
+        : p.paymentMethod === 'cash' ? 'Espèces' 
+        : p.paymentMethod === 'check' ? 'Chèque' 
+        : p.paymentMethod === 'bank_transfer' ? 'Virement bancaire' 
+        : '';
+
+      return [
+        p.id,
+        memberName,
+        String(p.amount),
+        p.status === 'paid' ? 'Payé' : p.status === 'pending' ? 'En attente' : 'Échoué',
+        methodLabel,
+        p.description || '',
+        p.date ? new Date(p.date).toLocaleDateString('fr-FR') : ''
+      ];
+    });
+
+    exportToCSV(headers, rows, `paiements_${club.name.toLowerCase().replace(/\s+/g, '_')}.csv`);
   };
 
   const categoriesOrder = [
@@ -1029,7 +1137,7 @@ export default function MemberManager({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 {/* View Mode Switcher */}
                 <div className="flex items-center gap-1 bg-slate-100/80 border border-slate-200 p-1 rounded-xl shrink-0">
                   <button
@@ -1053,6 +1161,36 @@ export default function MemberManager({
                     <Grid className="w-4 h-4" />
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleExportMembersCSV}
+                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm px-3 py-2.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                  title="Exporter la liste complète des membres en format CSV / Excel"
+                >
+                  <FileDown className="w-4 h-4 text-emerald-600" />
+                  <span>Exporter Membres</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportEventsCSV}
+                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm px-3 py-2.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                  title="Exporter la liste des événements en format CSV / Excel"
+                >
+                  <Calendar className="w-4 h-4 text-emerald-600" />
+                  <span>Exporter Événements</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportPaymentsCSV}
+                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm px-3 py-2.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                  title="Exporter tous les règlements en format CSV / Excel"
+                >
+                  <CreditCard className="w-4 h-4 text-emerald-600" />
+                  <span>Exporter Paiements</span>
+                </button>
 
                 <button
                   onClick={() => setShowMemberForm(true)}
@@ -1176,7 +1314,7 @@ export default function MemberManager({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600 uppercase">Prix de l'adhésion (€)</label>
+                  <label className="text-xs font-bold text-slate-600 uppercase">Prix de l'adhésion ({currencySymbol})</label>
                   <input
                     type="number"
                     value={membershipAmount}
@@ -1401,7 +1539,7 @@ export default function MemberManager({
                               </p>
                               <p className="flex items-center gap-1">
                                 <span className={m.membershipPaid ? 'text-emerald-600 font-bold' : 'text-amber-500 font-bold'}>
-                                  {m.membershipPaid ? '✓ Payé' : '✗ En attente'} ({m.membershipAmount || 150} €)
+                                  {m.membershipPaid ? '✓ Payé' : '✗ En attente'} ({m.membershipAmount || 150} {currencySymbol})
                                 </span>
                               </p>
                             </div>
@@ -1521,7 +1659,7 @@ export default function MemberManager({
                           <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
                             m.membershipPaid ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'
                           }`}>
-                            {m.membershipPaid ? '✓ Payée' : '✗ Attente'} ({m.membershipAmount || 150}€)
+                            {m.membershipPaid ? '✓ Payée' : '✗ Attente'} ({m.membershipAmount || 150}{currencySymbol})
                           </span>
                         </div>
                       </div>
@@ -2376,10 +2514,10 @@ export default function MemberManager({
                 <div>
                   <h6 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Trésorerie Cotisations</h6>
                   <p className="text-2xl font-black text-slate-800 mt-1">
-                    {totalAmountCollected} € <span className="text-slate-400 text-xs font-bold">perçus</span>
+                    {totalAmountCollected} {currencySymbol} <span className="text-slate-400 text-xs font-bold">perçus</span>
                   </p>
                   <p className="text-[11px] text-slate-500 font-medium mt-1">
-                    En attente : <strong className="text-amber-600">{totalAmountPending} €</strong> ({totalPending} membres)
+                    En attente : <strong className="text-amber-600">{totalAmountPending} {currencySymbol}</strong> ({totalPending} membres)
                   </p>
                 </div>
               </div>
@@ -2606,7 +2744,7 @@ export default function MemberManager({
                                 disabled={isUpdatingStep4Id === m.id}
                                 className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500 text-center focus:bg-white transition"
                               />
-                              <span className="text-xs font-bold text-slate-400">€</span>
+                              <span className="text-xs font-bold text-slate-400">{currencySymbol}</span>
                             </div>
                           </td>
 
@@ -3165,7 +3303,7 @@ export default function MemberManager({
                   <div className="space-y-0.5">
                     <p className="text-xs font-bold text-slate-500 uppercase">Statut Cotisation Club</p>
                     <p className="text-sm font-bold text-slate-800">
-                      Montant de l'adhésion : {selectedMemberForDetail.membershipAmount || 150} €
+                      Montant de l'adhésion : {selectedMemberForDetail.membershipAmount || 150} {currencySymbol}
                     </p>
                   </div>
                   <button

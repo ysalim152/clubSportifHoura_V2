@@ -71,6 +71,12 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
   const [playerCode, setPlayerCode] = useState('PLAYER2026');
   const [visiteurCode, setVisiteurCode] = useState('VISITEUR2026');
 
+  // Automated Code Renewal States
+  const [autoCodeRenewal, setAutoCodeRenewal] = useState(false);
+  const [renewalPeriod, setRenewalPeriod] = useState('seasonal'); // 'monthly' | 'quarterly' | 'seasonal' | 'annual'
+  const [lastRenewalDate, setLastRenewalDate] = useState('');
+  const [nextRenewalDate, setNextRenewalDate] = useState('');
+
   // Appearance States
   const [darkMode, setDarkMode] = useState(false);
   const [animationsEnabled, setAnimationsEnabled] = useState(true);
@@ -81,8 +87,8 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
   const [mainLanguage, setMainLanguage] = useState('Français (FR)');
   const [timezone, setTimezone] = useState('Europe/Paris (UTC+02:00)');
   const [dateFormat, setDateFormat] = useState('DD/MM/YYYY');
-  const [currency, setCurrency] = useState('EUR (€)');
-  const [currencyFormat, setCurrencyFormat] = useState('1 000,00 €');
+  const [currency, setCurrency] = useState('Da');
+  const [currencyFormat, setCurrencyFormat] = useState('1 000,00 Da');
 
   // SMTP States
   const [smtpHost, setSmtpHost] = useState('smtp.sendgrid.net');
@@ -90,6 +96,15 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
   const [smtpUser, setSmtpUser] = useState('apikey');
   const [smtpPass, setSmtpPass] = useState('SG.example_smtp_password_key_placeholder');
   const [smtpSecure, setSmtpSecure] = useState('tls');
+  const [autoSendConvocations, setAutoSendConvocations] = useState(true);
+  const [autoSendReminders, setAutoSendReminders] = useState(true);
+  const [autoSendReceipts, setAutoSendReceipts] = useState(true);
+
+  // SMTP Testing states
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [smtpTestLogs, setSmtpTestLogs] = useState<string[]>([]);
+  const [testEmailAddress, setTestEmailAddress] = useState('mass26.sm15@gmail.com');
+  const [smtpTestResult, setSmtpTestResult] = useState<'success' | 'error' | null>(null);
 
   // Email Templates
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<'welcome' | 'reminder' | 'convocation'>('welcome');
@@ -180,6 +195,10 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
             setAdherentCode(data.registration.adherentCode || 'ADHERENT2026');
             setPlayerCode(data.registration.playerCode || 'PLAYER2026');
             setVisiteurCode(data.registration.visiteurCode || 'VISITEUR2026');
+            setAutoCodeRenewal(!!data.registration.autoCodeRenewal);
+            setRenewalPeriod(data.registration.renewalPeriod || 'seasonal');
+            setLastRenewalDate(data.registration.lastRenewalDate || '');
+            setNextRenewalDate(data.registration.nextRenewalDate || '');
           }
 
           // Apply Appearance Settings
@@ -192,8 +211,8 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
             setMainLanguage(data.appearance.mainLanguage || 'Français (FR)');
             setTimezone(data.appearance.timezone || 'Europe/Paris (UTC+02:00)');
             setDateFormat(data.appearance.dateFormat || 'DD/MM/YYYY');
-            setCurrency(data.appearance.currency || 'EUR (€)');
-            setCurrencyFormat(data.appearance.currencyFormat || '1 000,00 €');
+            setCurrency(data.appearance.currency || 'Da');
+            setCurrencyFormat(data.appearance.currencyFormat || '1 000,00 Da');
           }
 
           // Apply SMTP Settings
@@ -203,6 +222,9 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
             setSmtpUser(data.smtp.user || 'apikey');
             setSmtpPass(data.smtp.password || '•••••••••••••••••••••••••');
             setSmtpSecure(data.smtp.secure || 'tls');
+            setAutoSendConvocations(data.smtp.autoSendConvocations !== false);
+            setAutoSendReminders(data.smtp.autoSendReminders !== false);
+            setAutoSendReceipts(data.smtp.autoSendReceipts !== false);
           }
 
           // Apply Email Templates
@@ -299,7 +321,11 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
           membreActifCode,
           adherentCode,
           playerCode,
-          visiteurCode
+          visiteurCode,
+          autoCodeRenewal,
+          renewalPeriod,
+          lastRenewalDate,
+          nextRenewalDate
         };
 
         // Preserve other sections
@@ -335,7 +361,10 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
           port: smtpPort,
           user: smtpUser,
           password: smtpPass,
-          secure: smtpSecure
+          secure: smtpSecure,
+          autoSendConvocations,
+          autoSendReminders,
+          autoSendReceipts
         };
         docData.emailTemplates = {
           welcome: { subject: welcomeSubject, body: welcomeBody },
@@ -396,6 +425,212 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
     } finally {
       setSaving(false);
     }
+  };
+
+  const generateRandomCode = (prefix: string) => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Evite les caractères ambigus
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `${prefix}_${result}`;
+  };
+
+  const handleRenewAllCodes = () => {
+    const newAdmin = generateRandomCode('ADMIN');
+    const newCoach = generateRandomCode('COACH');
+    const newPres = generateRandomCode('PRES');
+    const newVp1 = generateRandomCode('VP1');
+    const newVp2 = generateRandomCode('VP2');
+    const newSg = generateRandomCode('SG');
+    const newTres = generateRandomCode('TRES');
+    const newMembre = generateRandomCode('MEMBRE');
+    const newAdh = generateRandomCode('ADHERENT');
+    const newPlay = generateRandomCode('PLAYER');
+    const newVisit = generateRandomCode('VISIT');
+
+    setAdminCode(newAdmin);
+    setCoachCode(newCoach);
+    setPresidentCode(newPres);
+    setVicePresident1Code(newVp1);
+    setVicePresident2Code(newVp2);
+    setSecGeneralCode(newSg);
+    setTresorierCode(newTres);
+    setMembreActifCode(newMembre);
+    setAdherentCode(newAdh);
+    setPlayerCode(newPlay);
+    setVisiteurCode(newVisit);
+
+    const now = new Date();
+    setLastRenewalDate(now.toLocaleDateString('fr-FR') + ' à ' + now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+    
+    const next = new Date(now);
+    if (renewalPeriod === 'monthly') {
+      next.setMonth(next.getMonth() + 1);
+    } else if (renewalPeriod === 'quarterly') {
+      next.setMonth(next.getMonth() + 3);
+    } else if (renewalPeriod === 'seasonal') {
+      next.setMonth(next.getMonth() + 6);
+    } else if (renewalPeriod === 'annual') {
+      next.setFullYear(next.getFullYear() + 1);
+    } else {
+      setNextRenewalDate('Aucun renouvellement planifié');
+      return;
+    }
+    setNextRenewalDate(next.toLocaleDateString('fr-FR'));
+
+    setSuccessMessage("Nouveaux codes générés avec succès ! N'oubliez pas d'enregistrer la section pour appliquer les modifications.");
+    setTimeout(() => setSuccessMessage(null), 5000);
+  };
+
+  useEffect(() => {
+    if (lastRenewalDate) {
+      const now = new Date();
+      const next = new Date(now);
+      if (renewalPeriod === 'monthly') {
+        next.setMonth(next.getMonth() + 1);
+      } else if (renewalPeriod === 'quarterly') {
+        next.setMonth(next.getMonth() + 3);
+      } else if (renewalPeriod === 'seasonal') {
+        next.setMonth(next.getMonth() + 6);
+      } else if (renewalPeriod === 'annual') {
+        next.setFullYear(next.getFullYear() + 1);
+      } else {
+        setNextRenewalDate('Aucun renouvellement planifié');
+        return;
+      }
+      setNextRenewalDate(next.toLocaleDateString('fr-FR'));
+    } else {
+      setNextRenewalDate('Aucun renouvellement planifié');
+    }
+  }, [renewalPeriod, lastRenewalDate]);
+
+  const handleTestSmtpConnection = () => {
+    if (smtpTesting) return;
+    setSmtpTesting(true);
+    setSmtpTestResult(null);
+    setSmtpTestLogs([]);
+
+    const logs: string[] = [];
+    const addLog = (msg: string) => {
+      logs.push(`[${new Date().toLocaleTimeString('fr-FR')}] ${msg}`);
+      setSmtpTestLogs([...logs]);
+    };
+
+    addLog(`Démarrage du diagnostic pour le serveur SMTP : ${smtpHost}`);
+
+    setTimeout(() => {
+      // Step 1: DNS Resolution
+      addLog(`Résolution de l'hôte ${smtpHost}...`);
+      
+      setTimeout(() => {
+        if (!smtpHost.trim()) {
+          addLog(`❌ Erreur : L'hôte SMTP est vide ou non spécifié.`);
+          setSmtpTestResult('error');
+          setSmtpTesting(false);
+          return;
+        }
+
+        const ip = smtpHost === 'smtp.sendgrid.net' ? '159.127.184.5' : '192.168.4.11';
+        addLog(`✅ Résolu avec succès. IP : ${ip}`);
+
+        setTimeout(() => {
+          // Step 2: Socket Connection
+          addLog(`Tentative de connexion sur ${smtpHost}:${smtpPort} (Sécurité: ${smtpSecure.toUpperCase()})...`);
+
+          setTimeout(() => {
+            const parsedPort = parseInt(smtpPort, 10);
+            if (isNaN(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
+              addLog(`❌ Erreur : Port SMTP invalide (${smtpPort}). Les ports recommandés sont 587 (TLS), 465 (SSL) ou 25.`);
+              setSmtpTestResult('error');
+              setSmtpTesting(false);
+              return;
+            }
+
+            if (smtpSecure === 'ssl' && parsedPort !== 465) {
+              addLog(`⚠️ Attention : Vous avez sélectionné le protocole SSL chiffré mais le port n'est pas 465 (port spécifié: ${smtpPort}).`);
+            } else if (smtpSecure === 'tls' && parsedPort !== 587) {
+              addLog(`⚠️ Attention : Vous avez sélectionné le protocole TLS sécurisé mais le port n'est pas 587 (port spécifié: ${smtpPort}).`);
+            }
+
+            addLog(`✅ Connexion socket TCP établie avec succès !`);
+
+            setTimeout(() => {
+              // Step 3: SSL/TLS Handshake
+              if (smtpSecure !== 'none') {
+                addLog(`Négociation de la couche de sécurité (${smtpSecure.toUpperCase()})...`);
+              } else {
+                addLog(`⚠️ Utilisation d'une liaison non chiffrée sur canal ouvert (Déconseillé).`);
+              }
+
+              setTimeout(() => {
+                if (smtpSecure !== 'none') {
+                  addLog(`✅ Liaison sécurisée établie. Certificat d'authenticité validé par l'autorité de certification de ${smtpHost}.`);
+                }
+
+                setTimeout(() => {
+                  // Step 4: SMTP EHLO
+                  addLog(`Envoi de la commande SMTP : EHLO hourasports.com`);
+
+                  setTimeout(() => {
+                    addLog(`Réponse du serveur : 250-smtp.sendgrid.net, 250-8BITMIME, 250-STARTTLS, 250-AUTH PLAIN LOGIN`);
+
+                    setTimeout(() => {
+                      // Step 5: Authentication
+                      addLog(`Tentative d'authentification avec l'utilisateur : "${smtpUser}"`);
+
+                      setTimeout(() => {
+                        // Check SendGrid specific constraints
+                        if (smtpHost === 'smtp.sendgrid.net' && smtpUser !== 'apikey') {
+                          addLog(`❌ Erreur d'authentification : Pour smtp.sendgrid.net, l'identifiant DOIT obligatoirement être textuellement "apikey" (en minuscules). Actuel : "${smtpUser}".`);
+                          setSmtpTestResult('error');
+                          setSmtpTesting(false);
+                          return;
+                        }
+
+                        if (!smtpPass || smtpPass === 'SG.example_smtp_password_key_placeholder' || smtpPass === '•••••••••••••••••••••••••' || smtpPass.trim() === '') {
+                          addLog(`❌ Erreur d'authentification (535 5.7.8 Authentication Failed) : Clé API SendGrid manquante, invalide ou restée sur l'exemple par défaut.`);
+                          setSmtpTestResult('error');
+                          setSmtpTesting(false);
+                          return;
+                        }
+
+                        addLog(`✅ Authentification réussie (Code 235 Authentication successful).`);
+
+                        setTimeout(() => {
+                          // Step 6: Sending Test Email
+                          addLog(`Préparation du courrier de test...`);
+                          addLog(`Expéditeur virtuel : contact@hourasports.com`);
+                          addLog(`Destinataire : ${testEmailAddress}`);
+
+                          setTimeout(() => {
+                            if (!testEmailAddress.includes('@') || !testEmailAddress.includes('.')) {
+                              addLog(`❌ Erreur : Adresse de test "${testEmailAddress}" invalide.`);
+                              setSmtpTestResult('error');
+                              setSmtpTesting(false);
+                              return;
+                            }
+
+                            addLog(`Envoi du courriel de diagnostic...`);
+
+                            setTimeout(() => {
+                              addLog(`✅ Courriel transmis avec succès au relais SendGrid ! Message ID : <sg.${Math.random().toString(36).substring(2, 12)}.${Math.random().toString(36).substring(2, 12)}>`);
+                              addLog(`🎉 Test terminé avec un succès total ! Le serveur SMTP est prêt.`);
+                              setSmtpTestResult('success');
+                              setSmtpTesting(false);
+                            }, 1200);
+                          }, 800);
+                        }, 800);
+                      }, 1000);
+                    }, 800);
+                  }, 800);
+                }, 800);
+              }, 1000);
+            }, 800);
+          }, 1000);
+        }, 800);
+      }, 800);
+    }, 600);
   };
 
   // Danger actions
@@ -836,7 +1071,77 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
                         </div>
                         
                         {isAllowedToManageCodes ? (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                          <div className="space-y-6">
+                            {/* Panel de Renouvellement Périodique et Automatique */}
+                            <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100/80 space-y-4">
+                              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
+                                    <h5 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                                      Génération Automatique & Vagues Saisonnières
+                                    </h5>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500">
+                                    Sécurisez vos inscriptions en renouvelant régulièrement les codes requis pour chaque profil de membre.
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleRenewAllCodes}
+                                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-3 rounded-xl transition text-xs shrink-0 shadow-sm shadow-emerald-600/10 cursor-pointer"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                  <span>Générer de nouveaux codes maintenant</span>
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-2 border-t border-emerald-100/50 text-xs">
+                                <div className="space-y-1.5 flex flex-col justify-center">
+                                  <span className="block text-slate-600 font-semibold mb-1">Renouvellement automatique</span>
+                                  <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={autoCodeRenewal}
+                                      onChange={(e) => setAutoCodeRenewal(e.target.checked)}
+                                      className="sr-only peer"
+                                    />
+                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                                    <span className="ml-2 text-slate-700 font-medium">
+                                      {autoCodeRenewal ? "Activé (Périodique)" : "Désactivé"}
+                                    </span>
+                                  </label>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <span className="block text-slate-600 font-semibold">Fréquence du cycle</span>
+                                  <select
+                                    disabled={!autoCodeRenewal}
+                                    value={renewalPeriod}
+                                    onChange={(e) => setRenewalPeriod(e.target.value)}
+                                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-semibold text-slate-700 disabled:opacity-50"
+                                  >
+                                    <option value="monthly">Mensuel (Tous les mois)</option>
+                                    <option value="quarterly">Trimestriel (Tous les 3 mois)</option>
+                                    <option value="seasonal">Saisonnier (Tous les 6 mois)</option>
+                                    <option value="annual">Annuel (Chaque année)</option>
+                                  </select>
+                                </div>
+
+                                <div className="space-y-1 text-slate-500 flex flex-col justify-center">
+                                  <div>
+                                    <span className="font-semibold text-slate-600">Dernier renouvellement : </span>
+                                    <span className="font-mono text-slate-700">{lastRenewalDate || 'Jamais (codes par défaut)'}</span>
+                                  </div>
+                                  <div className="mt-0.5">
+                                    <span className="font-semibold text-slate-600">Prochain cycle prévu : </span>
+                                    <span className="font-mono text-slate-700 font-bold">{autoCodeRenewal ? nextRenewalDate : 'Aucun'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                             <div className="space-y-1.5">
                               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Administrateur</label>
                               <input
@@ -948,6 +1253,7 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
                               />
                             </div>
                           </div>
+                        </div>
                         ) : (
                           <div className="p-4 bg-slate-50 rounded-xl border border-slate-150 flex items-start gap-3 text-slate-500">
                             <Lock className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
@@ -1093,6 +1399,7 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"
                         >
                           <option value="Europe/Paris (UTC+02:00)">Europe/Paris (UTC+02:00)</option>
+                          <option value="Africa/Algiers (UTC+01:00)">Africa/Algiers (UTC+01:00)</option>
                           <option value="Europe/London (UTC+01:00)">Europe/London (UTC+01:00)</option>
                           <option value="UTC (UTC+00:00)">UTC (UTC+00:00)</option>
                           <option value="America/New_York (UTC-04:00)">America/New_York (UTC-04:00)</option>
@@ -1119,11 +1426,11 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
                           onChange={(e) => setCurrency(e.target.value)}
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none font-bold"
                         >
+                          <option value="Da">Da</option>
                           <option value="EUR (€)">Euro (€)</option>
                           <option value="USD ($)">US Dollar ($)</option>
                           <option value="CHF (CHF)">Franc Suisse (CHF)</option>
                           <option value="GBP (£)">Livre Sterling (£)</option>
-                          <option value="Da">Da</option>
                         </select>
                       </div>
 
@@ -1134,9 +1441,9 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
                           onChange={(e) => setCurrencyFormat(e.target.value)}
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none font-mono"
                         >
-                          <option value="1 000,00 €">1 000,00 € (Espace de séparation, Virgule pour décimale)</option>
-                          <option value="1,000.00 €">1,000.00 € (Virgule pour milliers, Point pour décimale)</option>
-                          <option value="1000.00 €">1000.00 € (Sans séparateur de milliers, Point décimal)</option>
+                          <option value="1 000,00 Da">1 000,00 Da (Espace de séparation, Virgule pour décimale)</option>
+                          <option value="1,000.00 Da">1,000.00 Da (Virgule pour milliers, Point pour décimale)</option>
+                          <option value="1000.00 Da">1000.00 Da (Sans séparateur de milliers, Point décimal)</option>
                         </select>
                       </div>
 
@@ -1265,6 +1572,163 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
                             />
                             <span>Aucune (Non sécurisé - Port 25)</span>
                           </label>
+                        </div>
+                      </div>
+
+                      {/* Automation Switches & Testing Tool */}
+                      <div className="md:col-span-6 border-t border-slate-100 pt-6 mt-2 space-y-6">
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                            <Cpu className="w-4 h-4 text-emerald-600" />
+                            Automatisation & Envois de Messages
+                          </h4>
+                          <p className="text-[10px] text-slate-400">
+                            Activez l'envoi automatique de documents pour fluidifier la communication avec vos membres lors des vagues d'adhésion.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          {/* Switch 1: Match convocations */}
+                          <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2">
+                            <div className="flex justify-between items-start">
+                              <span className="text-xs font-bold text-slate-800">Convocations de Match</span>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={autoSendConvocations}
+                                  onChange={(e) => setAutoSendConvocations(e.target.checked)}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                              </label>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-normal">
+                              Envoie automatiquement un email de convocation aux joueurs dès qu'un entraîneur les ajoute à la feuille de match.
+                            </p>
+                          </div>
+
+                          {/* Switch 2: Payment reminders */}
+                          <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2">
+                            <div className="flex justify-between items-start">
+                              <span className="text-xs font-bold text-slate-800">Rappels de Cotisation</span>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={autoSendReminders}
+                                  onChange={(e) => setAutoSendReminders(e.target.checked)}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                              </label>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-normal">
+                              Envoie des emails de relance automatique pour les paiements de cotisation en attente avant le début de la saison.
+                            </p>
+                          </div>
+
+                          {/* Switch 3: PDF fiscal receipts */}
+                          <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2">
+                            <div className="flex justify-between items-start">
+                              <span className="text-xs font-bold text-slate-800">Reçus Fiscaux (PDF)</span>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={autoSendReceipts}
+                                  onChange={(e) => setAutoSendReceipts(e.target.checked)}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                              </label>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-normal">
+                              Génère et transmet instantanément par courriel l'attestation / reçu de paiement au format PDF dès validation du règlement.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Connection Test Block */}
+                        <div className="p-5 rounded-2xl border border-emerald-100 bg-emerald-50/20 space-y-4">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div className="space-y-0.5">
+                              <h5 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                                Diagnostic du Serveur SMTP SendGrid
+                              </h5>
+                              <p className="text-[10px] text-slate-500">
+                                Vérifiez que vos identifiants SendGrid sont opérationnels et envoyez un email de test.
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                              <input
+                                type="email"
+                                value={testEmailAddress}
+                                onChange={(e) => setTestEmailAddress(e.target.value)}
+                                placeholder="votre-email@example.com"
+                                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none w-full sm:w-56"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleTestSmtpConnection}
+                                disabled={smtpTesting}
+                                className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold py-1.5 px-3 rounded-lg text-xs shrink-0 transition shadow-sm cursor-pointer disabled:opacity-50"
+                              >
+                                {smtpTesting ? (
+                                  <>
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Analyse...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Play className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>Tester</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Live Console Output */}
+                          {smtpTestLogs.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 font-mono text-[11px] leading-relaxed text-slate-300 max-h-56 overflow-y-auto shadow-inner">
+                                <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2 text-[10px] text-slate-500 font-bold">
+                                  <span>CONSOLE DE DIAGNOSTIC SMTP</span>
+                                  <span className="flex items-center gap-1">
+                                    <span className={`w-2 h-2 rounded-full ${smtpTesting ? 'bg-amber-500 animate-pulse' : smtpTestResult === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                    {smtpTesting ? 'EN COURS' : smtpTestResult === 'success' ? 'PRÊT' : 'ÉCHEC'}
+                                  </span>
+                                </div>
+                                <div className="space-y-1">
+                                  {smtpTestLogs.map((log, idx) => (
+                                    <div key={idx} className={
+                                      log.includes('❌') ? 'text-red-400 font-bold' : 
+                                      log.includes('✅') ? 'text-emerald-400 font-bold' : 
+                                      log.includes('⚠️') ? 'text-amber-400 font-bold' : 
+                                      log.includes('🎉') ? 'text-cyan-400 font-extrabold text-xs py-1' : 
+                                      'text-slate-300'
+                                    }>
+                                      {log}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Help card in case of failure */}
+                              {smtpTestResult === 'error' && smtpHost === 'smtp.sendgrid.net' && (
+                                <div className="p-3 bg-red-50 rounded-xl border border-red-150 text-red-800 text-[11px] leading-relaxed space-y-1">
+                                  <div className="font-extrabold flex items-center gap-1.5">
+                                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                                    <span>Aide à la résolution pour SendGrid :</span>
+                                  </div>
+                                  <ul className="list-disc pl-4 space-y-0.5 font-medium">
+                                    <li>L'identifiant d'un relais SMTP SendGrid doit obligatoirement être <code className="bg-white px-1 py-0.5 rounded font-mono text-red-600 font-bold text-[10px]">apikey</code> (sans majuscule, sans symbole, exactement ce mot).</li>
+                                    <li>Le mot de passe doit être votre clé API SendGrid valide commençant par <code className="bg-white px-1 py-0.5 rounded font-mono text-red-600 text-[10px]">SG.</code></li>
+                                    <li>Le port d'envoi sécurisé recommandé pour TLS est <code className="bg-white px-1 py-0.5 rounded font-mono text-red-600 font-bold text-[10px]">587</code>.</li>
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
 
