@@ -4,7 +4,7 @@ import {
   FileText, ShieldCheck, Check, AlertCircle, RefreshCw, UploadCloud,
   Download, Sparkles, Key, PenTool, CheckCircle, Trash2, Camera, Map, HelpCircle
 } from 'lucide-react';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, sanitizeData } from '../firebase';
 import { Club, Member } from '../types';
 import { User as AuthUser } from 'firebase/auth';
@@ -57,13 +57,122 @@ export default function UserProfileManager({
     setErrorMsg(null);
     try {
       const memberDocRef = doc(db, 'clubs', club.id, 'members', currentUser.uid);
+      
+      // Look for duplicate/old member documents with the current user's email address in the club
+      const emailLower = currentUser.email?.toLowerCase().trim() || '';
+      let oldMemberDocs: Member[] = [];
+      
+      if (emailLower) {
+        try {
+          const q = query(collection(db, 'clubs', club.id, 'members'), where('email', '==', emailLower));
+          const querySnap = await getDocs(q);
+          oldMemberDocs = querySnap.docs
+            .filter(d => d.id !== currentUser.uid)
+            .map(d => ({ id: d.id, ...d.data() } as Member));
+        } catch (e) {
+          console.error("Error searching duplicate member documents: ", e);
+        }
+      }
+
       const memberSnap = await getDoc(memberDocRef).catch(err => {
         handleFirestoreError(err, OperationType.GET, `clubs/${club.id}/members/${currentUser.uid}`);
         throw err;
       });
 
-      if (memberSnap.exists()) {
-        const mData = memberSnap.data() as Member;
+      let currentMemberData = memberSnap.exists() ? (memberSnap.data() as Member) : null;
+
+      // If duplicate/older member documents created by an admin are found, merge and migrate them
+      if (oldMemberDocs.length > 0) {
+        const oldMember = oldMemberDocs[0];
+        
+        const mergedMember: Member = {
+          id: currentUser.uid,
+          clubId: club.id,
+          firstName: currentMemberData?.firstName || oldMember.firstName || '',
+          lastName: currentMemberData?.lastName || oldMember.lastName || '',
+          role: oldMember.role || currentMemberData?.role || 'player',
+          email: currentUser.email || currentMemberData?.email || oldMember.email || '',
+          phone: currentMemberData?.phone || oldMember.phone || '',
+          licenseNumber: currentMemberData?.licenseNumber || oldMember.licenseNumber || '',
+          birthDate: currentMemberData?.birthDate || oldMember.birthDate || '',
+          membershipAmount: currentMemberData?.membershipAmount !== undefined ? currentMemberData.membershipAmount : (oldMember.membershipAmount !== undefined ? oldMember.membershipAmount : 0),
+          membershipPaid: currentMemberData?.membershipPaid || oldMember.membershipPaid || false,
+          createdAt: oldMember.createdAt || currentMemberData?.createdAt || new Date().toISOString(),
+          photoUrl: currentMemberData?.photoUrl || oldMember.photoUrl || '',
+          equipmentSize: currentMemberData?.equipmentSize || oldMember.equipmentSize || 'M',
+          
+          // Documents
+          medicalCertStatus: currentMemberData?.medicalCertStatus !== 'missing' && currentMemberData?.medicalCertStatus ? currentMemberData.medicalCertStatus : (oldMember.medicalCertStatus || 'missing'),
+          medicalCertFile: currentMemberData?.medicalCertFile || oldMember.medicalCertFile || undefined,
+          registrationFormStatus: currentMemberData?.registrationFormStatus !== 'missing' && currentMemberData?.registrationFormStatus ? currentMemberData.registrationFormStatus : (oldMember.registrationFormStatus || 'missing'),
+          registrationFormFile: currentMemberData?.registrationFormFile || oldMember.registrationFormFile || undefined,
+          parentalAuthStatus: currentMemberData?.parentalAuthStatus !== 'missing' && currentMemberData?.parentalAuthStatus ? currentMemberData.parentalAuthStatus : (oldMember.parentalAuthStatus || 'missing'),
+          parentalAuthFile: currentMemberData?.parentalAuthFile || oldMember.parentalAuthFile || undefined,
+          
+          // Charter signature
+          charterSigned: currentMemberData?.charterSigned || oldMember.charterSigned || false,
+          charterSignedDate: currentMemberData?.charterSignedDate || oldMember.charterSignedDate || undefined,
+          charterSignatureBase64: currentMemberData?.charterSignatureBase64 || oldMember.charterSignatureBase64 || undefined,
+        };
+
+        // Save the merged document at the active user's UID
+        await setDoc(memberDocRef, sanitizeData(mergedMember)).catch(err => {
+          handleFirestoreError(err, OperationType.WRITE, `clubs/${club.id}/members/${currentUser.uid}`);
+          throw err;
+        });
+
+        currentMemberData = mergedMember;
+
+        // Migrate other collections referencing old ID to the new UID
+        for (const oldDoc of oldMemberDocs) {
+          try {
+            // 1. Migrate Payments
+            const pq = query(collection(db, 'clubs', club.id, 'payments'), where('memberId', '==', oldDoc.id));
+            const pqSnap = await getDocs(pq);
+            for (const pDoc of pqSnap.docs) {
+              await updateDoc(doc(db, 'clubs', club.id, 'payments', pDoc.id), { memberId: currentUser.uid });
+            }
+
+            // 2. Migrate Player Match Stats
+            const sq = query(collection(db, 'clubs', club.id, 'playerStats'), where('memberId', '==', oldDoc.id));
+            const sqSnap = await getDocs(sq);
+            for (const sDoc of sqSnap.docs) {
+              await updateDoc(doc(db, 'clubs', club.id, 'playerStats', sDoc.id), { memberId: currentUser.uid });
+            }
+
+            // 3. Migrate Event Convocations
+            const eventsSnap = await getDocs(collection(db, 'clubs', club.id, 'events'));
+            for (const eDoc of eventsSnap.docs) {
+              const eventId = eDoc.id;
+              const oldConvId = `${eventId}_${oldDoc.id}`;
+              const oldConvRef = doc(db, 'clubs', club.id, 'events', eventId, 'convocations', oldConvId);
+              const oldConvSnap = await getDoc(oldConvRef);
+              if (oldConvSnap.exists()) {
+                const convData = oldConvSnap.data();
+                const newConvId = `${eventId}_${currentUser.uid}`;
+                const newConvRef = doc(db, 'clubs', club.id, 'events', eventId, 'convocations', newConvId);
+                await setDoc(newConvRef, sanitizeData({
+                  ...convData,
+                  id: newConvId,
+                  memberId: currentUser.uid
+                }));
+                await deleteDoc(oldConvRef);
+              }
+            }
+
+            // 4. Delete the duplicate member document to avoid listing duplicates
+            await deleteDoc(doc(db, 'clubs', club.id, 'members', oldDoc.id));
+          } catch (migrationErr) {
+            console.error(`Error migrating documents for old member ${oldDoc.id}:`, migrationErr);
+          }
+        }
+
+        // Trigger a fresh pull of data in parent App if possible
+        if (onRefreshClubData) onRefreshClubData();
+      }
+
+      if (currentMemberData) {
+        const mData = currentMemberData;
         setMember(mData);
         setFirstName(mData.firstName || '');
         setLastName(mData.lastName || '');
