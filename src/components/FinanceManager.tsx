@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   CreditCard, DollarSign, Plus, Search, Filter, ShieldAlert, Check, X, 
   ChevronRight, Calendar, User, TrendingUp, RefreshCw, Layers,
-  Receipt, Printer, Download, FileText, Trash2, TrendingDown, FileDown, Users
+  Receipt, Printer, Download, FileText, Trash2, TrendingDown, FileDown, Users,
+  Gift, Building2, Handshake, Coins, ArrowLeftRight
 } from 'lucide-react';
 import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, sanitizeData } from '../firebase';
@@ -45,6 +46,7 @@ export default function FinanceManager({
   const [status, setStatus] = useState<'paid' | 'pending' | 'failed'>('paid');
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'cash' | 'check' | 'bank_transfer'>('card');
   const [description, setDescription] = useState('Adhésion Annuelle');
+  const [resourceCategory, setResourceCategory] = useState('Cotisation');
 
   // Expense Form State
   const [expenseTitle, setExpenseTitle] = useState('');
@@ -124,7 +126,9 @@ export default function FinanceManager({
 
     const rows = payments.map(p => {
       const m = members.find(member => member.id === p.memberId);
-      const memberName = m ? `${m.lastName} ${m.firstName}` : 'Membre inconnu';
+      const memberName = p.memberId === 'global_club'
+        ? 'Ressource Globale (Club)'
+        : m ? `${m.lastName} ${m.firstName}` : 'Membre inconnu';
       const methodLabel = p.paymentMethod === 'card' ? 'Carte bancaire' 
         : p.paymentMethod === 'cash' ? 'Espèces' 
         : p.paymentMethod === 'check' ? 'Chèque' 
@@ -280,6 +284,7 @@ export default function FinanceManager({
     setStatus('paid');
     setPaymentMethod('card');
     setDescription('Adhésion Annuelle');
+    setResourceCategory('Cotisation');
     setShowPaymentForm(false);
   };
 
@@ -320,7 +325,7 @@ export default function FinanceManager({
       });
 
       // Update member's paid status in database too if this matches their membership fee
-      if (status === 'paid') {
+      if (status === 'paid' && memberId !== 'global_club') {
         const memberRef = doc(db, 'clubs', club.id, 'members', memberId);
         await updateDoc(memberRef, { membershipPaid: true }).catch(err => {
           handleFirestoreError(err, OperationType.UPDATE, `clubs/${club.id}/members/${memberId}`);
@@ -437,7 +442,9 @@ export default function FinanceManager({
   // Filters and Searching
   const filteredPayments = payments.filter(p => {
     const member = members.find(m => m.id === p.memberId);
-    const memberName = member ? `${member.firstName} ${member.lastName}` : '';
+    const memberName = p.memberId === 'global_club'
+      ? 'Ressource Globale (Club)'
+      : member ? `${member.firstName} ${member.lastName}` : '';
     
     const matchesSearch = 
       memberName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -629,14 +636,25 @@ export default function FinanceManager({
 
                   <form onSubmit={handleCreatePayment} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-600 uppercase">Licencié concerné</label>
+                      <label className="text-xs font-bold text-slate-600 uppercase">Bénéficiaire / Source</label>
                       <select
                         required
                         value={memberId}
-                        onChange={(e) => setMemberId(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setMemberId(val);
+                          if (val === 'global_club') {
+                            setResourceCategory('Sponsoring / Partenariat');
+                            setDescription('Sponsoring / Partenariat');
+                          } else {
+                            setResourceCategory('Cotisation');
+                            setDescription('Adhésion Annuelle');
+                          }
+                        }}
                         className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-white"
                       >
-                        <option value="">Sélectionner un membre...</option>
+                        <option value="">Sélectionner...</option>
+                        <option value="global_club">🏢 Aucun / Ressource globale du club</option>
                         {members.map(m => {
                           const roleLabel = {
                             admin: 'Administrateur',
@@ -662,7 +680,7 @@ export default function FinanceManager({
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-600 uppercase">Montant de la cotisation ({currencySymbol})</label>
+                      <label className="text-xs font-bold text-slate-600 uppercase">Montant du Règlement ({currencySymbol})</label>
                       <input
                         type="number"
                         required
@@ -672,8 +690,33 @@ export default function FinanceManager({
                       />
                     </div>
 
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="text-xs font-bold text-slate-600 uppercase font-sans">Nature de la Ressource / Catégorie de Revenu</label>
+                      <select
+                        value={resourceCategory}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setResourceCategory(val);
+                          if (val !== 'autre') {
+                            setDescription(val);
+                          } else {
+                            setDescription('');
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-white border-l-4 border-l-emerald-500 font-medium"
+                      >
+                        <option value="Cotisation">🎟️ Cotisation / Adhésion membre</option>
+                        <option value="Don ou Leg">🎁 Don ou Leg</option>
+                        <option value="Subvention de l'État / Collectivité locale">🏛️ Subvention de l'État / Collectivité locale</option>
+                        <option value="Sponsoring / Partenariat">📢 Sponsoring & Partenariat</option>
+                        <option value="Revenu de bien propre (Buvette, Événement...)">🍔 Revenu de bien propre (Buvette, Événement, Location...)</option>
+                        <option value="Transfert de sportif">⚽ Transfert de sportif</option>
+                        <option value="autre">📝 Autre (Saisir manuellement ci-dessous...)</option>
+                      </select>
+                    </div>
+
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-600 uppercase">Statut</label>
+                      <label className="text-xs font-bold text-slate-600 uppercase">Statut du Paiement</label>
                       <select
                         value={status}
                         onChange={(e) => setStatus(e.target.value as any)}
@@ -702,11 +745,12 @@ export default function FinanceManager({
                     )}
 
                     <div className="sm:col-span-2 space-y-1">
-                      <label className="text-xs font-bold text-slate-600 uppercase">Description / Note</label>
+                      <label className="text-xs font-bold text-slate-600 uppercase">Description / Note libre</label>
                       <input
                         type="text"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Ex: Sponsoring Maillots, Buvette Tournoi de Noël, etc."
                         className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm"
                       />
                     </div>
@@ -789,27 +833,41 @@ export default function FinanceManager({
                             <tr key={p.id} className="hover:bg-slate-50/50 transition">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-2.5">
-                                  <div className="w-8 h-8 bg-slate-100 text-slate-600 font-bold rounded-full flex items-center justify-center uppercase text-xs">
-                                    {member ? `${member.firstName[0]}${member.lastName[0]}` : "?"}
-                                  </div>
-                                  <div>
-                                    <p className="font-bold text-slate-900">{member ? `${member.firstName} ${member.lastName}` : "Membre supprimé"}</p>
-                                    <p className="text-[10px] text-slate-400 font-semibold">
-                                      {member ? ({
-                                        admin: 'Administrateur',
-                                        president: "Président de l'association",
-                                        vice_president_1: "1er Vice-président",
-                                        vice_president_2: "2e Vice-président",
-                                        sec_general: "Secrétaire Général",
-                                        tresorier: "Trésorier",
-                                        membre_actif: "Membre Actif",
-                                        adherent: "Adhérent",
-                                        player: "Joueur",
-                                        visiteur: "Visiteur",
-                                        coach: "Entraîneur"
-                                      }[member.role] || member.role) : ""}
-                                    </p>
-                                  </div>
+                                  {p.memberId === 'global_club' ? (
+                                    <>
+                                      <div className="w-8 h-8 bg-emerald-100 text-emerald-800 font-bold rounded-full flex items-center justify-center text-xs shrink-0 shadow-inner">
+                                        ⚽
+                                      </div>
+                                      <div>
+                                        <p className="font-bold text-slate-900">Ressource Globale (Club)</p>
+                                        <p className="text-[10px] text-emerald-600 font-semibold">Revenu général</p>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="w-8 h-8 bg-slate-100 text-slate-600 font-bold rounded-full flex items-center justify-center uppercase text-xs shrink-0">
+                                        {member ? `${member.firstName[0]}${member.lastName[0]}` : "?"}
+                                      </div>
+                                      <div>
+                                        <p className="font-bold text-slate-900">{member ? `${member.firstName} ${member.lastName}` : "Membre supprimé"}</p>
+                                        <p className="text-[10px] text-slate-400 font-semibold">
+                                          {member ? ({
+                                            admin: 'Administrateur',
+                                            president: "Président de l'association",
+                                            vice_president_1: "1er Vice-président",
+                                            vice_president_2: "2e Vice-président",
+                                            sec_general: "Secrétaire Général",
+                                            tresorier: "Trésorier",
+                                            membre_actif: "Membre Actif",
+                                            adherent: "Adhérent",
+                                            player: "Joueur",
+                                            visiteur: "Visiteur",
+                                            coach: "Entraîneur"
+                                          }[member.role] || member.role) : ""}
+                                        </p>
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               </td>
                               <td className="px-6 py-4 font-medium text-slate-650">

@@ -524,7 +524,7 @@ export default function App() {
       </div>
 
       {/* Sidebar navigation */}
-      <aside className={`w-full bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-850 transition-all duration-350 ease-in-out ${
+      <aside className={`w-full bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-850 transition-all duration-300 ease-in-out relative z-30 ${
         isSidebarCollapsed ? 'md:w-20' : 'md:w-72'
       } ${
         isMobileMenuOpen ? 'block' : 'hidden md:flex'
@@ -534,7 +534,7 @@ export default function App() {
           <div className="flex items-center justify-between gap-2.5">
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-md shrink-0">
-                <Activity className="w-6 h-6" />
+                <Activity className="w-6 h-6 animate-pulse" />
               </div>
               {!isSidebarCollapsed && (
                 <div className="transition-all duration-300 opacity-100 animate-fadeIn">
@@ -547,7 +547,7 @@ export default function App() {
             {/* Collapse toggle button for desktop */}
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="hidden md:flex p-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-750 transition cursor-pointer shrink-0"
+              className="hidden md:flex p-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-750 transition-colors cursor-pointer shrink-0"
               title={isSidebarCollapsed ? "Développer le menu" : "Réduire le menu"}
             >
               {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -555,7 +555,7 @@ export default function App() {
           </div>
 
           {/* Club Info Bar */}
-          <div className={`p-4 bg-slate-850 rounded-xl border border-slate-800 flex items-center gap-3 transition-all ${
+          <div className={`relative p-4 bg-slate-850 rounded-xl border border-slate-800 flex items-center gap-3 transition-all group/club ${
             isSidebarCollapsed ? 'md:p-2 md:justify-center' : ''
           }`}>
             <div className="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-bold text-sm uppercase shrink-0">
@@ -572,10 +572,22 @@ export default function App() {
                 </button>
               </div>
             )}
+            
+            {isSidebarCollapsed && (
+              <div className="absolute left-full ml-4 px-3.5 py-2.5 bg-slate-950 text-white rounded-xl opacity-0 translate-x-[-10px] pointer-events-none group-hover/club:opacity-100 group-hover/club:translate-x-0 transition-all duration-200 shadow-xl border border-slate-800 z-50">
+                <p className="font-bold text-xs whitespace-nowrap mb-1.5">{selectedClub.name}</p>
+                <button 
+                  onClick={() => setSelectedClub(null)}
+                  className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold transition flex items-center gap-1 cursor-pointer whitespace-nowrap bg-slate-900 border border-slate-800 rounded px-2 py-1 hover:bg-slate-850"
+                >
+                  <Compass className="w-3 h-3" /> Changer de club
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Main Navigation links */}
-          <nav className="space-y-1.5">
+          <nav className="space-y-1.5 relative">
             {filteredMenuItems.map(item => {
               const isActive = activeTab === item.id;
               return (
@@ -587,18 +599,32 @@ export default function App() {
                     window.scrollTo({ top: 0 });
                     setIsMobileMenuOpen(false);
                   }}
-                  title={item.label}
-                  className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-bold tracking-tight transition cursor-pointer ${
-                    isSidebarCollapsed ? 'md:justify-center md:px-2 md:py-3' : ''
+                  className={`relative w-full flex items-center rounded-xl text-sm font-bold tracking-tight transition-all duration-200 cursor-pointer group z-10 ${
+                    isSidebarCollapsed ? 'md:justify-center md:p-3' : 'px-4 py-3'
                   } ${
                     isActive 
-                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/25' 
-                      : 'hover:bg-slate-800 text-slate-400 hover:text-slate-150'
+                      ? 'text-white' 
+                      : 'hover:bg-slate-850/40 text-slate-400 hover:text-slate-100'
                   }`}
                 >
-                  <item.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                  {(!isSidebarCollapsed) && (
-                    <span className="whitespace-nowrap animate-fadeIn">{item.label}</span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="active-nav-pill"
+                      className="absolute inset-0 bg-emerald-600 rounded-xl -z-10 shadow-md shadow-emerald-950/30"
+                      transition={{ type: "spring", stiffness: 350, damping: 32 }}
+                    />
+                  )}
+
+                  <item.icon className={`w-5 h-5 shrink-0 transition-colors duration-200 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                  
+                  {!isSidebarCollapsed && (
+                    <span className="ml-3.5 whitespace-nowrap animate-fadeIn">{item.label}</span>
+                  )}
+
+                  {isSidebarCollapsed && (
+                    <div className="absolute left-full ml-4 px-3 py-2 bg-slate-950 text-white text-xs font-bold rounded-lg opacity-0 translate-x-[-10px] pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 shadow-xl border border-slate-800 z-50 whitespace-nowrap">
+                      {item.label}
+                    </div>
                   )}
                 </button>
               );
@@ -612,13 +638,12 @@ export default function App() {
         }`}>
           <button
             onClick={() => setIsMfaSettingsOpen(true)}
-            className={`w-full flex items-center justify-between p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 hover:bg-slate-850/50 text-left transition cursor-pointer group ${
-              isSidebarCollapsed ? 'md:p-1.5 md:justify-center md:border-none md:hover:bg-transparent' : ''
+            className={`relative w-full flex items-center justify-between p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 hover:bg-slate-850/50 text-left transition cursor-pointer group ${
+              isSidebarCollapsed ? 'md:p-1.5 md:justify-center md:border-none md:hover:bg-slate-850/50' : ''
             }`}
-            title="Paramètres de sécurité & MFA"
           >
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-9 h-9 bg-slate-800 rounded-full border border-slate-700 flex items-center justify-center text-white font-bold text-xs uppercase shadow-inner shrink-0 group-hover:border-emerald-500 transition">
+              <div className="w-9 h-9 bg-slate-800 rounded-full border border-slate-700 flex items-center justify-center text-white font-bold text-xs uppercase shadow-inner shrink-0 group-hover:border-emerald-500 transition-colors">
                 {currentUser.displayName ? currentUser.displayName[0] : currentUser.email ? currentUser.email[0] : '?'}
               </div>
               {!isSidebarCollapsed && (
@@ -626,7 +651,7 @@ export default function App() {
                   <p className="font-bold text-white text-xs truncate leading-normal">
                     {currentUser.displayName || currentUser.email?.split('@')[0]}
                   </p>
-                  <span className="inline-flex items-center gap-1 text-[9px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-emerald-400 transition mt-0.5">
+                  <span className="inline-flex items-center gap-1 text-[9px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-emerald-400 transition-colors mt-0.5">
                     <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
                     MFA / Sécurité
                   </span>
@@ -634,19 +659,30 @@ export default function App() {
               )}
             </div>
             {!isSidebarCollapsed && (
-              <Settings2 className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition shrink-0 ml-1" />
+              <Settings2 className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors shrink-0 ml-1" />
+            )}
+
+            {isSidebarCollapsed && (
+              <div className="absolute left-full ml-4 px-3 py-2 bg-slate-950 text-white text-xs font-bold rounded-lg opacity-0 translate-x-[-10px] pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 shadow-xl border border-slate-800 z-50 whitespace-nowrap">
+                MFA & Sécurité
+              </div>
             )}
           </button>
 
           <button
             onClick={handleLogout}
-            className={`w-full flex items-center justify-center gap-2 border border-slate-800 hover:border-slate-700 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white font-semibold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer ${
-              isSidebarCollapsed ? 'md:p-2.5 md:bg-transparent md:border-none md:hover:bg-slate-800' : ''
+            className={`relative w-full flex items-center justify-center gap-2 border border-slate-800 hover:border-slate-700 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white font-semibold py-2.5 px-4 rounded-xl text-xs transition-all duration-200 cursor-pointer group ${
+              isSidebarCollapsed ? 'md:p-3 md:bg-slate-850 md:border-slate-800' : ''
             }`}
-            title="Se déconnecter"
           >
             <LogOut className="w-3.5 h-3.5" />
             {!isSidebarCollapsed && <span>Se déconnecter</span>}
+
+            {isSidebarCollapsed && (
+              <div className="absolute left-full ml-4 px-3 py-2 bg-slate-950 text-rose-400 text-xs font-bold rounded-lg opacity-0 translate-x-[-10px] pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 shadow-xl border border-slate-800 z-50 whitespace-nowrap">
+                Se déconnecter
+              </div>
+            )}
           </button>
         </div>
       </aside>

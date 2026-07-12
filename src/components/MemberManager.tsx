@@ -1063,36 +1063,6 @@ export default function MemberManager({
 
         return (
           <div className="space-y-6">
-            {/* Quick Category Summary Badges */}
-            {categoriesWithData.length > 0 && (
-              <div id="age-categories-summary-row" className="bg-slate-50 border border-slate-150 rounded-2xl p-4 flex flex-wrap items-center gap-2 shadow-sm">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">Catégories d'âge :</span>
-                {categoriesWithData.map((cat, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setAgeFilter(ageFilter === cat.name ? 'all' : cat.name)}
-                    className={`border rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                      ageFilter === cat.name
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
-                    }`}
-                    title="Cliquez pour filtrer"
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${ageFilter === cat.name ? 'bg-white' : 'bg-emerald-500'}`}></span>
-                    <span>{cat.name} :</span>
-                    <span className="font-extrabold">{cat.count}</span>
-                  </button>
-                ))}
-                {ageFilter !== 'all' && (
-                  <button
-                    onClick={() => setAgeFilter('all')}
-                    className="text-xs font-bold text-slate-500 hover:text-slate-800 transition cursor-pointer underline ml-auto"
-                  >
-                    Réinitialiser le filtre
-                  </button>
-                )}
-              </div>
-            )}
 
             {/* Controls Bar */}
             <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
@@ -1119,20 +1089,6 @@ export default function MemberManager({
                     <option value="player">Joueurs</option>
                     <option value="coach">Coachs</option>
                     <option value="admin">Administrateurs</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl">
-                  <Calendar className="w-4 h-4 text-slate-400" />
-                  <select
-                    value={ageFilter}
-                    onChange={(e) => setAgeFilter(e.target.value)}
-                    className="bg-transparent border-none text-xs font-semibold text-slate-600 focus:outline-none bg-white"
-                  >
-                    <option value="all">Toutes les catégories</option>
-                    {categoriesOrder.map((cat, idx) => (
-                      <option key={idx} value={cat}>{cat}</option>
-                    ))}
                   </select>
                 </div>
               </div>
@@ -1469,11 +1425,6 @@ export default function MemberManager({
                                   {m.firstName} {m.lastName}
                                 </p>
                                 <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                  {m.birthDate && (
-                                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded inline-block">
-                                      {getAgeCategory(m.birthDate)}
-                                    </span>
-                                  )}
                                   {m.licenseNumber ? (
                                     <span className="text-[10px] font-semibold text-slate-400 flex items-center gap-1">
                                       <Clipboard className="w-3 h-3 text-slate-300" />
@@ -1644,10 +1595,6 @@ export default function MemberManager({
 
                       {/* Stats/Badges: Age & Cotisation & Size */}
                       <div className="bg-slate-50/80 rounded-xl p-3 text-xs space-y-2 border border-slate-100">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400 font-semibold">Catégorie:</span>
-                          <span className="font-bold text-slate-700">{getAgeCategory(m.birthDate)}</span>
-                        </div>
                         <div className="flex justify-between">
                           <span className="text-slate-400 font-semibold">Taille:</span>
                           <span className="font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">
@@ -2870,7 +2817,7 @@ export default function MemberManager({
                     
                     {selectedMemberForDetail.birthDate && (
                       <p className="text-xs text-slate-400 font-semibold">
-                        📅 Né le {new Date(selectedMemberForDetail.birthDate).toLocaleDateString('fr-FR')} ({getAgeCategory(selectedMemberForDetail.birthDate)})
+                        📅 Né le {new Date(selectedMemberForDetail.birthDate).toLocaleDateString('fr-FR')}
                       </p>
                     )}
                   </div>
