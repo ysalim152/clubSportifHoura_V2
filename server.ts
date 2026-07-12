@@ -22,6 +22,9 @@ async function startServer() {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (apiKey && apiKey !== 'MY_GEMINI_API_KEY' && apiKey.trim() !== '') {
+    const startsWithAIza = apiKey.trim().startsWith('AIza');
+    const startsWithYa29 = apiKey.trim().startsWith('ya29');
+    console.log(`[Diagnostic] GEMINI_API_KEY is present. Length: ${apiKey.length}. Starts with AIza: ${startsWithAIza}. Starts with ya29: ${startsWithYa29}.`);
     try {
       ai = new GoogleGenAI({
         apiKey,
@@ -43,7 +46,20 @@ async function startServer() {
 
   // 1. Healthcheck / Status
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', hasAI: !!ai });
+    const startsWithAIza = apiKey?.trim().startsWith('AIza') ?? false;
+    const startsWithYa29 = apiKey?.trim().startsWith('ya29') ?? false;
+    const trimmed = apiKey?.trim() ?? '';
+    const firstFive = trimmed.substring(0, 5);
+    const lastFive = trimmed.substring(trimmed.length - 5);
+    res.json({ 
+      status: 'ok', 
+      hasAI: !!ai,
+      keyLength: apiKey?.length ?? 0,
+      startsWithAIza,
+      startsWithYa29,
+      firstFive,
+      lastFive
+    });
   });
 
   // 2. SWOT & KPIs Strategic analysis

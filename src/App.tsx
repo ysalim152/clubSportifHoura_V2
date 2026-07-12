@@ -44,6 +44,7 @@ export default function App() {
   const [isMfaSettingsOpen, setIsMfaSettingsOpen] = useState(false);
   const [hasMfaEnabled, setHasMfaEnabled] = useState(false);
   const [checkingMfa, setCheckingMfa] = useState(false);
+  const [customPermissions, setCustomPermissions] = useState<Record<string, string[]> | null>(null);
   
   // Tab states: 'dashboard' | 'membres' | 'calendrier' | 'finances' | 'messagerie'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -278,10 +279,18 @@ export default function App() {
           symbol = match ? match[1] : 'Da';
         }
         setCurrencySymbol(symbol);
+
+        // Set custom permissions
+        if (data?.permissions) {
+          setCustomPermissions(data.permissions);
+        } else {
+          setCustomPermissions(null);
+        }
       } else {
         setIsDarkMode(false);
         setCurrencySymbol('Da');
         document.documentElement.classList.remove('dark');
+        setCustomPermissions(null);
       }
     }, (error) => {
       console.error("Error listening to club settings:", error);
@@ -453,6 +462,11 @@ export default function App() {
   const filteredMenuItems = menuItems.filter(item => {
     // Admin and super user have access to everything
     if (userRole === 'admin' || userProfile?.isSuperUser) return true;
+
+    // Apply custom dynamic permissions if defined for this role
+    if (customPermissions && customPermissions[userRole]) {
+      return customPermissions[userRole].includes(item.id);
+    }
 
     if (item.id === 'dashboard') return true;
     if (item.id === 'profil') return true;

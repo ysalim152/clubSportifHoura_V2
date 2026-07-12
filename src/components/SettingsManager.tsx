@@ -31,8 +31,50 @@ interface BackupItem {
   status: 'completed' | 'failed';
 }
 
+const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
+  admin: ['dashboard', 'profil', 'membres', 'calendrier', 'equipements', 'finances', 'strategie', 'messagerie', 'feedback', 'parametres'],
+  president: ['dashboard', 'profil', 'membres', 'calendrier', 'equipements', 'finances', 'strategie', 'messagerie', 'feedback', 'parametres'],
+  vice_president_1: ['dashboard', 'profil', 'membres', 'calendrier', 'equipements', 'finances', 'strategie', 'messagerie', 'feedback', 'parametres'],
+  vice_president_2: ['dashboard', 'profil', 'membres', 'calendrier', 'equipements', 'finances', 'strategie', 'messagerie', 'feedback', 'parametres'],
+  sec_general: ['dashboard', 'profil', 'membres', 'calendrier', 'equipements', 'finances', 'strategie', 'messagerie', 'feedback', 'parametres'],
+  tresorier: ['dashboard', 'profil', 'membres', 'calendrier', 'equipements', 'finances', 'strategie', 'messagerie', 'feedback', 'parametres'],
+  coach: ['dashboard', 'profil', 'calendrier', 'equipements', 'messagerie', 'feedback', 'parametres'],
+  membre_actif: ['dashboard', 'profil', 'calendrier', 'equipements', 'strategie', 'messagerie', 'feedback', 'parametres'],
+  adherent: ['dashboard', 'profil', 'calendrier', 'equipements', 'finances', 'messagerie', 'feedback', 'parametres'],
+  player: ['dashboard', 'profil', 'calendrier', 'equipements', 'finances', 'messagerie', 'feedback', 'parametres'],
+  visiteur: ['dashboard', 'profil', 'calendrier', 'feedback', 'parametres'],
+};
+
+const FEATURE_LABELS: Record<string, { label: string; icon: string }> = {
+  dashboard: { label: 'Tableau de Bord', icon: '📊' },
+  profil: { label: 'Mon Profil', icon: '👤' },
+  membres: { label: 'Membres & Équipes', icon: '👥' },
+  calendrier: { label: 'Calendrier & Matchs', icon: '📅' },
+  equipements: { label: 'Équipements & Matériel', icon: '👕' },
+  finances: { label: 'Cotisations & Finances', icon: '💳' },
+  strategie: { label: 'Décisions & SWOT IA', icon: '🧠' },
+  messagerie: { label: 'Messagerie Club', icon: '💬' },
+  feedback: { label: 'Feedback & Idées', icon: '💝' },
+  parametres: { label: 'Paramètres', icon: '⚙️' },
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: '👑 Administrateur',
+  president: '🏢 Président',
+  vice_president_1: '🤝 1er Vice-Président',
+  vice_president_2: '🤝 2e Vice-Président',
+  sec_general: '📝 Secrétaire Général',
+  tresorier: '💰 Trésorier',
+  coach: '🏃 Entraîneur / Coach',
+  membre_actif: '⚡ Membre Actif',
+  adherent: '🎟️ Adhérent',
+  player: '⚽ Joueur / Athlète',
+  visiteur: '👁️ Visiteur simple',
+};
+
 export default function SettingsManager({ club, onRefresh, currentUserRole, isSuperUser }: SettingsManagerProps) {
-  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'system' | 'danger'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'system' | 'permissions' | 'danger'>('general');
+  const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>(DEFAULT_ROLE_PERMISSIONS);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -70,6 +112,54 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
   const [adherentCode, setAdherentCode] = useState('ADHERENT2026');
   const [playerCode, setPlayerCode] = useState('PLAYER2026');
   const [visiteurCode, setVisiteurCode] = useState('VISITEUR2026');
+
+  // New Sports Association Specific States
+  const [associationSeason, setAssociationSeason] = useState('Saison 2026-2027');
+  const [associationSport, setAssociationSport] = useState('Football');
+  const [associationAffiliation, setAssociationAffiliation] = useState('FFF-549102');
+  const [associationType, setAssociationType] = useState('Loi 1901');
+
+  // Duplicate Codes Warning State
+  const [duplicateCodesError, setDuplicateCodesError] = useState<string | null>(null);
+
+  // Live validation for duplicate registration codes
+  useEffect(() => {
+    const codes = [
+      { name: 'Administrateur', code: adminCode },
+      { name: 'Président', code: presidentCode },
+      { name: 'Vice-Président 1', code: vicePresident1Code },
+      { name: 'Vice-Président 2', code: vicePresident2Code },
+      { name: 'Secrétaire Général', code: secGeneralCode },
+      { name: 'Trésorier', code: tresorierCode },
+      { name: 'Membre Actif', code: membreActifCode },
+      { name: 'Coach', code: coachCode },
+      { name: 'Adhérent', code: adherentCode },
+      { name: 'Joueur', code: playerCode },
+      { name: 'Visiteur', code: visiteurCode },
+    ].filter(c => c.code && c.code.trim() !== '');
+
+    const codeToNames: Record<string, string[]> = {};
+    codes.forEach(c => {
+      const trimmed = c.code.trim();
+      if (!codeToNames[trimmed]) {
+        codeToNames[trimmed] = [];
+      }
+      codeToNames[trimmed].push(c.name);
+    });
+
+    const duplicates = Object.entries(codeToNames).filter(([_, names]) => names.length > 1);
+
+    if (duplicates.length > 0) {
+      const desc = duplicates.map(([code, names]) => `"${code}" pour les profils : ${names.join(', ')}`).join(' | ');
+      setDuplicateCodesError(`Attention : Des codes d'inscription identiques sont attribués à des rôles différents ! Cela pose un risque majeur de sécurité. Doublons détectés : ${desc}`);
+    } else {
+      setDuplicateCodesError(null);
+    }
+  }, [
+    adminCode, presidentCode, vicePresident1Code, vicePresident2Code,
+    secGeneralCode, tresorierCode, membreActifCode, coachCode,
+    adherentCode, playerCode, visiteurCode
+  ]);
 
   // Automated Code Renewal States
   const [autoCodeRenewal, setAutoCodeRenewal] = useState(false);
@@ -166,6 +256,10 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
             setAssociationDesc(data.association.description || '');
             setAssociationYear(data.association.yearCreated || '2018');
             setAssociationLogo(data.association.logoUrl || club.logoUrl || '');
+            setAssociationSeason(data.association.season || 'Saison 2026-2027');
+            setAssociationSport(data.association.sport || 'Football');
+            setAssociationAffiliation(data.association.affiliation || 'FFF-549102');
+            setAssociationType(data.association.associationType || 'Loi 1901');
           }
 
           // Apply Contact Settings
@@ -256,6 +350,13 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
           if (data.backup) {
             setAutoBackups(data.backup.autoBackups !== false);
           }
+
+          // Apply Permissions
+          if (data.permissions) {
+            setRolePermissions(data.permissions);
+          } else {
+            setRolePermissions(DEFAULT_ROLE_PERMISSIONS);
+          }
         }
       } catch (err: any) {
         console.error("Error loading system settings:", err);
@@ -275,7 +376,7 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
   }, [club.id]);
 
   // General Save Action
-  const handleSaveSettings = async (section: 'general' | 'appearance' | 'system') => {
+  const handleSaveSettings = async (section: 'general' | 'appearance' | 'system' | 'permissions') => {
     setSaving(true);
     setSuccessMessage(null);
     setErrorMessage(null);
@@ -291,12 +392,22 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
       const existingData = snap.exists() ? snap.data() : {};
 
       if (section === 'general') {
+        if (duplicateCodesError) {
+          setErrorMessage("Impossible d'enregistrer : " + duplicateCodesError + " Veuillez attribuer un code unique à chaque rôle avant de sauvegarder.");
+          setSaving(false);
+          return;
+        }
+
         docData.association = {
           name: associationName,
           sigle: associationSigle,
           description: associationDesc,
           yearCreated: associationYear,
-          logoUrl: associationLogo
+          logoUrl: associationLogo,
+          season: associationSeason,
+          sport: associationSport,
+          affiliation: associationAffiliation,
+          associationType: associationType
         };
         docData.contact = {
           email: contactEmail,
@@ -334,6 +445,7 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
         docData.emailTemplates = existingData.emailTemplates || null;
         docData.security = existingData.security || null;
         docData.backup = existingData.backup || null;
+        docData.permissions = existingData.permissions || null;
       } else if (section === 'appearance') {
         docData.appearance = {
           darkMode,
@@ -355,6 +467,7 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
         docData.emailTemplates = existingData.emailTemplates || null;
         docData.security = existingData.security || null;
         docData.backup = existingData.backup || null;
+        docData.permissions = existingData.permissions || null;
       } else if (section === 'system') {
         docData.smtp = {
           host: smtpHost,
@@ -387,6 +500,19 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
         docData.contact = existingData.contact || null;
         docData.registration = existingData.registration || null;
         docData.appearance = existingData.appearance || null;
+        docData.permissions = existingData.permissions || null;
+      } else if (section === 'permissions') {
+        docData.permissions = rolePermissions;
+
+        // Preserve other sections
+        docData.association = existingData.association || null;
+        docData.contact = existingData.contact || null;
+        docData.registration = existingData.registration || null;
+        docData.appearance = existingData.appearance || null;
+        docData.smtp = existingData.smtp || null;
+        docData.emailTemplates = existingData.emailTemplates || null;
+        docData.security = existingData.security || null;
+        docData.backup = existingData.backup || null;
       }
 
       await setDoc(settingsDocRef, docData).catch(err => {
@@ -397,14 +523,14 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
       // Update audit log
       const newLog: AuditLog = {
         id: 'new_' + Date.now(),
-        action: `Mis à jour: Configuration des paramètres (${section === 'general' ? 'Général' : section === 'appearance' ? 'Apparence' : 'Système'})`,
+        action: `Mis à jour: Configuration des paramètres (${section === 'general' ? 'Général' : section === 'appearance' ? 'Apparence' : section === 'system' ? 'Système' : 'Habilitations & Rôles'})`,
         user: 'mass26.sm15@gmail.com',
         ip: '192.168.1.45',
         timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
       };
 
       setAuditLogs(prev => [newLog, ...prev]);
-      setSuccessMessage(`Les paramètres de la section "${section === 'general' ? 'Général' : section === 'appearance' ? 'Apparence' : 'Système'}" ont été enregistrés avec succès !`);
+      setSuccessMessage(`Les paramètres de la section "${section === 'general' ? 'Général' : section === 'appearance' ? 'Apparence' : section === 'system' ? 'Système' : 'Habilitations & Rôles'}" ont été enregistrés avec succès !`);
       
       // Update club name in memory if modified in current club
       if (section === 'general' && associationName !== club.name) {
@@ -760,7 +886,7 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
     setTimeout(() => setSuccessMessage(null), 3000);
   };
 
-  const isAllowedToManageCodes = currentUserRole === 'admin' || isSuperUser;
+  const isAllowedToManageCodes = currentUserRole === 'admin' || currentUserRole === 'president' || isSuperUser;
 
   return (
     <div className="space-y-6">
@@ -832,6 +958,18 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
           >
             <Server className="w-4 h-4 shrink-0" />
             <span>Système & SMTP</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('permissions')}
+            className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl text-xs md:text-sm font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
+              activeTab === 'permissions' 
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/10' 
+                : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 shadow-sm'
+            }`}
+          >
+            <Shield className="w-4 h-4 shrink-0 animate-pulse text-emerald-500" />
+            <span>Habilitations & Rôles</span>
           </button>
 
           <button
@@ -925,6 +1063,51 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
                           placeholder="Ex: https://image.url/logo.png"
                         />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Saison Active</label>
+                        <select
+                          value={associationSeason}
+                          onChange={(e) => setAssociationSeason(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 font-semibold text-slate-700"
+                        >
+                          <option value="Saison 2025-2026">Saison 2025-2026</option>
+                          <option value="Saison 2026-2027">Saison 2026-2027</option>
+                          <option value="Saison 2027-2028">Saison 2027-2028</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Sport Principal de l'Association</label>
+                        <input
+                          type="text"
+                          value={associationSport}
+                          onChange={(e) => setAssociationSport(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 font-semibold"
+                          placeholder="Ex: Football, Basketball, Tennis, Judo"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">N° d'Affiliation à la Fédération</label>
+                        <input
+                          type="text"
+                          value={associationAffiliation}
+                          onChange={(e) => setAssociationAffiliation(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 font-mono"
+                          placeholder="Ex: FFF-549102"
+                        />
+                      </div>
+                      <div className="space-y-1.5 col-span-1">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Régime / Statut Juridique</label>
+                        <select
+                          value={associationType}
+                          onChange={(e) => setAssociationType(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 font-semibold text-slate-700"
+                        >
+                          <option value="Loi 1901">Association Loi 1901 (France)</option>
+                          <option value="ASBL">ASBL (Belgique / Luxembourg)</option>
+                          <option value="Loi 1905">Association Loi 1905</option>
+                          <option value="Autre">Autre régime juridique</option>
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -1140,6 +1323,17 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
                                 </div>
                               </div>
                             </div>
+
+                            {duplicateCodesError && (
+                              <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-start gap-2 shadow-sm animate-fadeIn">
+                                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="font-bold">Alerte de Sécurité Majeure</p>
+                                  <p className="mt-0.5 leading-relaxed">{duplicateCodesError}</p>
+                                  <p className="mt-1 text-rose-500 font-semibold">Le système bloquera l'enregistrement de la section tant que ces doublons ne seront pas résolus.</p>
+                                </div>
+                              </div>
+                            )}
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                             <div className="space-y-1.5">
@@ -2129,6 +2323,102 @@ export default function SettingsManager({ club, onRefresh, currentUserRole, isSu
                     </button>
                   </div>
 
+                </div>
+              )}
+
+              {/* TAB: HABILITATIONS & ROLES */}
+              {activeTab === 'permissions' && (
+                <div className="space-y-6 animate-fadeIn">
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                      <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                        <Shield className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Gestion des Habilitations & Rôles d'Accès</h3>
+                        <p className="text-[10px] text-slate-400 font-medium">Configurez finement quel rôle a accès à quel module ou section de l'application.</p>
+                      </div>
+                    </div>
+
+                    <div className="p-6">
+                      <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+                        En tant qu'<strong>Administrateur</strong>, vous pouvez restreindre ou autoriser l'accès aux différents modules d'HouraSports pour chaque profil d'utilisateur. 
+                        Cochez ou décochez les cases pour modifier les permissions. Le rôle <strong>Administrateur</strong> conserve toujours un accès complet pour éviter tout verrouillage accidentel.
+                      </p>
+
+                      <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                              <th className="p-4 font-extrabold text-slate-700 w-48">Rôle / Profil</th>
+                              {Object.entries(FEATURE_LABELS).map(([featId, feat]) => (
+                                <th key={featId} className="p-3 font-bold text-slate-600 text-center whitespace-nowrap" title={feat.label}>
+                                  <span className="block text-base mb-1">{feat.icon}</span>
+                                  <span className="text-[10px] uppercase tracking-wider">{feat.label}</span>
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-150">
+                            {Object.entries(ROLE_LABELS).map(([roleId, roleName]) => {
+                              const isRoleAdmin = roleId === 'admin';
+                              return (
+                                <tr key={roleId} className={`hover:bg-slate-50/80 transition ${isRoleAdmin ? 'bg-slate-50/40 font-medium' : ''}`}>
+                                  <td className="p-4">
+                                    <span className="font-bold text-slate-800 block text-sm">{roleName}</span>
+                                    <span className="text-[10px] text-slate-400 font-mono">{roleId}</span>
+                                  </td>
+                                  {Object.keys(FEATURE_LABELS).map(featId => {
+                                    const hasAccess = isRoleAdmin || (rolePermissions[roleId]?.includes(featId) ?? false);
+                                    return (
+                                      <td key={featId} className="p-3 text-center">
+                                        <input
+                                          type="checkbox"
+                                          disabled={isRoleAdmin}
+                                          checked={hasAccess}
+                                          onChange={(e) => {
+                                            if (isRoleAdmin) return;
+                                            const currentFeats = rolePermissions[roleId] || [];
+                                            let newFeats: string[];
+                                            if (e.target.checked) {
+                                              newFeats = [...currentFeats, featId];
+                                            } else {
+                                              newFeats = currentFeats.filter(id => id !== featId);
+                                            }
+                                            setRolePermissions(prev => ({
+                                              ...prev,
+                                              [roleId]: newFeats
+                                            }));
+                                          }}
+                                          className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                        />
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save button bottom */}
+                  <div className="flex justify-end bg-slate-50 p-4 border border-slate-200 rounded-2xl shadow-sm">
+                    <button
+                      onClick={() => handleSaveSettings('permissions')}
+                      disabled={saving}
+                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-xl transition text-sm cursor-pointer disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>Enregistrer la grille des habilitations</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
