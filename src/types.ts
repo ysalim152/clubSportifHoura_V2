@@ -161,4 +161,43 @@ export interface Equipment {
   createdAt: string;
 }
 
+export interface TournamentMatch {
+  id: string;
+  round: number; // e.g. 1, 2, 3... for round robin; 1 (Quarters), 2 (Semis), 3 (Finals) for elimination
+  homeTeam: string;
+  awayTeam: string;
+  homeScore?: number;
+  awayScore?: number;
+  status: 'pending' | 'completed';
+  winner?: string; // name of the winner team
+  date?: string;
+  time?: string;
+}
+
+export interface Tournament {
+  id: string;
+  clubId: string;
+  name: string;
+  date: string;
+  category: string; // e.g. U11, Seniors, etc.
+  format: 'round_robin' | 'single_elimination';
+  teams: string[]; // names or IDs of participating teams
+  status: 'draft' | 'active' | 'completed';
+  matches: TournamentMatch[];
+  createdAt: string;
+  subscribers?: string[]; // user IDs of subscribed members
+  isArchived?: boolean;
+}
+
+export interface TournamentNotification {
+  id: string;
+  tournamentId: string;
+  title: string;
+  message: string;
+  type: 'schedule_change' | 'match_result';
+  matchId?: string;
+  createdAt: string;
+  createdBy: string;
+}
+
 

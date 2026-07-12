@@ -4,7 +4,7 @@ import {
   Activity, Users, Calendar, CreditCard, MessageSquare, LogOut, 
   ChevronRight, ChevronLeft, LayoutDashboard, Compass, RefreshCw, AlertCircle,
   ShieldCheck, Settings2, ShieldAlert, X, Brain, MessageSquareHeart,
-  User as UserIcon, Shirt, Menu
+  User as UserIcon, Shirt, Menu, Trophy
 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
@@ -26,6 +26,7 @@ import SettingsManager from './components/SettingsManager';
 import FeedbackManager from './components/FeedbackManager';
 import UserProfileManager from './components/UserProfileManager';
 import EquipmentManager from './components/EquipmentManager';
+import TournamentManager from './components/TournamentManager';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -446,6 +447,7 @@ export default function App() {
     { id: 'profil', label: 'Mon Profil', icon: UserIcon },
     { id: 'membres', label: 'Membres & Équipes', icon: Users },
     { id: 'calendrier', label: 'Calendrier & Matchs', icon: Calendar },
+    { id: 'tournois', label: 'Gestion Tournois', icon: Trophy },
     { id: 'equipements', label: 'Équipements & Matériel', icon: Shirt },
     { id: 'finances', label: 'Cotisations & Finances', icon: CreditCard },
     { id: 'strategie', label: 'Décisions & SWOT IA', icon: Brain },
@@ -477,6 +479,10 @@ export default function App() {
     }
 
     if (item.id === 'calendrier') {
+      return true;
+    }
+
+    if (item.id === 'tournois') {
       return true;
     }
 
@@ -781,6 +787,14 @@ export default function App() {
                     onRefresh={fetchClubData}
                     quickAction={quickAction}
                     clearQuickAction={() => setQuickAction(null)}
+                  />
+                )}
+
+                {activeTab === 'tournois' && (
+                  <TournamentManager 
+                    club={selectedClub} 
+                    teams={teams} 
+                    userRole={userRole}
                   />
                 )}
 

@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { Member } from '../types';
+import { Member, Tournament, TournamentMatch } from '../types';
 
 export const generateRegistrationFormPDF = (member: Member, clubName: string, clubSport: string) => {
   const doc = new jsPDF();
@@ -368,3 +368,365 @@ export const generateCharterSignaturePDF = (member: Member, clubName: string, si
   
   doc.save(`Attestation_Signature_Charte_${member.lastName}_${member.firstName}.pdf`);
 };
+
+export const generateTournamentPDF = (tournament: Tournament, clubName: string) => {
+  const doc = new jsPDF();
+  let pageNumber = 1;
+
+  // Header drawing function
+  const drawPageHeader = (pageNum: number) => {
+    // Header Bar
+    doc.setFillColor(15, 23, 42); // Slate 900
+    doc.rect(0, 0, 210, 30, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text(clubName.toUpperCase(), 15, 12);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(200, 200, 200);
+    doc.text("PLATEFORME HOURASPORTS - RAPPORT OFFICIEL DE TOURNOI", 15, 20);
+
+    // Decorative line
+    doc.setDrawColor(16, 185, 129); // Emerald 500
+    doc.setLineWidth(1.5);
+    doc.line(0, 30, 210, 30);
+  };
+
+  const drawPageFooter = (pageNum: number) => {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Rapport officiel généré par HouraSports • Page ${pageNum}`, 105, 287, { align: 'center' });
+    doc.text(new Date().toLocaleDateString('fr-FR', { hour: '2-digit', minute: '2-digit' } as any), 195, 287, { align: 'right' });
+  };
+
+  // Start Page 1
+  drawPageHeader(pageNumber);
+  drawPageFooter(pageNumber);
+
+  let y = 42;
+
+  // Tournament Identity Card
+  doc.setFillColor(248, 250, 252); // Slate 50
+  doc.setDrawColor(226, 232, 240); // Slate 200
+  doc.setLineWidth(0.5);
+  doc.rect(15, y, 180, 38, 'FD');
+
+  doc.setTextColor(15, 23, 42); // Slate 900
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text(tournament.name.toUpperCase(), 22, y + 8);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139); // Slate 500
+  
+  doc.setFont('helvetica', 'bold');
+  doc.text("Date :", 22, y + 16);
+  doc.setFont('helvetica', 'normal');
+  doc.text(new Date(tournament.date).toLocaleDateString('fr-FR'), 45, y + 16);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text("Catégorie :", 22, y + 23);
+  doc.setFont('helvetica', 'normal');
+  doc.text(tournament.category, 45, y + 23);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text("Format :", 110, y + 16);
+  doc.setFont('helvetica', 'normal');
+  doc.text(tournament.format === 'round_robin' ? 'Championnat (Poule Unique)' : 'Élimination Directe (Arbre)', 130, y + 16);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text("Statut :", 110, y + 23);
+  doc.setFont('helvetica', 'normal');
+  const statusLabel = tournament.status === 'completed' ? 'Terminé' : tournament.status === 'active' ? 'En cours / Actif' : 'Brouillon';
+  doc.text(statusLabel, 130, y + 23);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text("Inscrits :", 110, y + 30);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${tournament.teams.length} équipes participantes`, 130, y + 30);
+
+  y += 48;
+
+  // Registered Teams Section
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  doc.text("ÉQUIPES PARTICIPANTES", 15, y);
+  
+  doc.setDrawColor(16, 185, 129); // Emerald 500
+  doc.setLineWidth(1);
+  doc.line(15, y + 2, 195, y + 2);
+  
+  y += 8;
+
+  // Print teams in multiple columns (up to 3 columns) to optimize space
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+
+  const cols = 2;
+  const colWidth = 90;
+  const rowHeight = 7;
+  
+  tournament.teams.forEach((teamName, index) => {
+    const colIndex = index % cols;
+    const rowIndex = Math.floor(index / cols);
+    const itemX = 15 + colIndex * colWidth;
+    const itemY = y + rowIndex * rowHeight;
+
+    // Bullet point / background badge
+    doc.setFillColor(241, 245, 249); // slate-100
+    doc.rect(itemX, itemY - 4.5, 3, 3, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.text(teamName, itemX + 6, itemY - 2);
+  });
+
+  const numTeamRows = Math.ceil(tournament.teams.length / cols);
+  y += numTeamRows * rowHeight + 8;
+
+  // Standings / Classement Table (only for round robin)
+  if (tournament.format === 'round_robin') {
+    // 1. Calculate Standings
+    const tableData: Record<string, {
+      played: number, won: number, drawn: number, lost: number,
+      goalsFor: number, goalsAgainst: number, points: number
+    }> = {};
+
+    tournament.teams.forEach(team => {
+      tableData[team] = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 };
+    });
+
+    tournament.matches.forEach(m => {
+      if (m.status !== 'completed' || m.homeScore === undefined || m.awayScore === undefined) return;
+      if (!tableData[m.homeTeam]) tableData[m.homeTeam] = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 };
+      if (!tableData[m.awayTeam]) tableData[m.awayTeam] = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 };
+
+      const home = tableData[m.homeTeam];
+      const away = tableData[m.awayTeam];
+
+      home.played += 1;
+      away.played += 1;
+      home.goalsFor += m.homeScore;
+      home.goalsAgainst += m.awayScore;
+      away.goalsFor += m.awayScore;
+      away.goalsAgainst += m.homeScore;
+
+      if (m.homeScore > m.awayScore) {
+        home.won += 1;
+        home.points += 3;
+        away.lost += 1;
+      } else if (m.awayScore > m.homeScore) {
+        away.won += 1;
+        away.points += 3;
+        home.lost += 1;
+      } else {
+        home.drawn += 1;
+        home.points += 1;
+        away.drawn += 1;
+        away.points += 1;
+      }
+    });
+
+    const standings = Object.entries(tableData)
+      .map(([name, stats]) => ({
+        name,
+        ...stats,
+        difference: stats.goalsFor - stats.goalsAgainst
+      }))
+      .sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.difference !== a.difference) return b.difference - a.difference;
+        return b.goalsFor - a.goalsFor;
+      });
+
+    // Draw Standing Section Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text("CLASSEMENT GÉNÉRAL (CHAMPIONNAT)", 15, y);
+    
+    doc.setDrawColor(16, 185, 129);
+    doc.line(15, y + 2, 195, y + 2);
+    y += 8;
+
+    // Table Headers
+    doc.setFillColor(15, 23, 42); // Dark slate
+    doc.rect(15, y, 180, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+
+    doc.text("POS", 18, y + 5.5);
+    doc.text("ÉQUIPE", 32, y + 5.5);
+    doc.text("PTS", 100, y + 5.5);
+    doc.text("J", 113, y + 5.5);
+    doc.text("G", 124, y + 5.5);
+    doc.text("N", 135, y + 5.5);
+    doc.text("P", 146, y + 5.5);
+    doc.text("BP", 157, y + 5.5);
+    doc.text("BC", 168, y + 5.5);
+    doc.text("DIFF", 182, y + 5.5);
+
+    y += 8;
+
+    // Table rows
+    standings.forEach((row, sIdx) => {
+      // Row bg alternating
+      if (sIdx % 2 === 0) {
+        doc.setFillColor(248, 250, 252);
+      } else {
+        doc.setFillColor(255, 255, 255);
+      }
+      doc.rect(15, y, 180, 7.5, 'F');
+      doc.setDrawColor(241, 245, 249);
+      doc.line(15, y + 7.5, 195, y + 7.5);
+
+      doc.setTextColor(15, 23, 42);
+      doc.setFont('helvetica', sIdx === 0 ? 'bold' : 'normal');
+      doc.setFontSize(8.5);
+
+      doc.text(`${sIdx + 1}`, 19, y + 5);
+      doc.text(row.name, 32, y + 5);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${row.points}`, 100, y + 5);
+      doc.setFont('helvetica', 'normal');
+
+      doc.text(`${row.played}`, 113, y + 5);
+      doc.text(`${row.won}`, 124, y + 5);
+      doc.text(`${row.drawn}`, 135, y + 5);
+      doc.text(`${row.lost}`, 146, y + 5);
+      doc.text(`${row.goalsFor}`, 157, y + 5);
+      doc.text(`${row.goalsAgainst}`, 168, y + 5);
+      
+      const diffSign = row.difference > 0 ? `+${row.difference}` : `${row.difference}`;
+      doc.setFont('helvetica', 'bold');
+      if (row.difference > 0) doc.setTextColor(16, 185, 129); // emerald
+      else if (row.difference < 0) doc.setTextColor(239, 68, 68); // rose
+      else doc.setTextColor(100, 116, 139); // slate
+
+      doc.text(diffSign, 182, y + 5);
+
+      y += 7.5;
+    });
+
+    y += 10;
+  }
+
+  // Check if we need to add a page break before matches list
+  if (y > 150) {
+    doc.addPage();
+    pageNumber++;
+    drawPageHeader(pageNumber);
+    drawPageFooter(pageNumber);
+    y = 42;
+  }
+
+  // Matches Title Section
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  doc.text("CALENDRIER & RÉSULTATS DES MATCHS", 15, y);
+  
+  doc.setDrawColor(16, 185, 129);
+  doc.line(15, y + 2, 195, y + 2);
+  y += 8;
+
+  // Group matches by Round
+  const roundNumbers = Array.from(new Set(tournament.matches.map(m => m.round))).sort((a, b) => a - b);
+  
+  roundNumbers.forEach((roundNum) => {
+    const roundMatches = tournament.matches.filter(m => m.round === roundNum);
+    let roundLabel = `Journée ${roundNum}`;
+    if (tournament.format === 'single_elimination') {
+      if (roundNum === 0) roundLabel = "Huitièmes de finale";
+      else if (roundNum === 1) roundLabel = "Quarts de finale";
+      else if (roundNum === 2) roundLabel = "Demi-finales";
+      else if (roundNum === 3) roundLabel = "Finale";
+    }
+
+    // Header check
+    if (y + 25 > 275) {
+      doc.addPage();
+      pageNumber++;
+      drawPageHeader(pageNumber);
+      drawPageFooter(pageNumber);
+      y = 42;
+    }
+
+    // Print Round Header
+    doc.setFillColor(241, 245, 249); // slate-100
+    doc.rect(15, y, 180, 6.5, 'F');
+    doc.setTextColor(71, 85, 105);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text(roundLabel.toUpperCase(), 18, y + 4.5);
+    y += 7.5;
+
+    roundMatches.forEach(match => {
+      // Single match item height is roughly 11
+      if (y + 11 > 275) {
+        doc.addPage();
+        pageNumber++;
+        drawPageHeader(pageNumber);
+        drawPageFooter(pageNumber);
+        y = 42;
+
+        // Reprint Round Header for continuity
+        doc.setFillColor(241, 245, 249);
+        doc.rect(15, y, 180, 6.5, 'F');
+        doc.setTextColor(71, 85, 105);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.text(`${roundLabel.toUpperCase()} (Suite)`, 18, y + 4.5);
+        y += 7.5;
+      }
+
+      // Draw match row
+      doc.setDrawColor(241, 245, 249);
+      doc.line(15, y + 9.5, 195, y + 9.5);
+
+      // Home vs Away Team
+      doc.setFontSize(9);
+      doc.setFont('helvetica', match.winner === match.homeTeam ? 'bold' : 'normal');
+      doc.setTextColor(15, 23, 42);
+      doc.text(match.homeTeam, 18, y + 5.5);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184); // light gray 'vs'
+      doc.text("vs", 90, y + 5.5, { align: 'center' });
+
+      doc.setFont('helvetica', match.winner === match.awayTeam ? 'bold' : 'normal');
+      doc.setTextColor(15, 23, 42);
+      doc.text(match.awayTeam, 102, y + 5.5);
+
+      // Score / Status
+      if (match.status === 'completed') {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(16, 185, 129); // completed emerald
+        const scoreText = `${match.homeScore} - ${match.awayScore}`;
+        doc.text(scoreText, 175, y + 5.5, { align: 'center' });
+      } else {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8);
+        doc.setTextColor(156, 163, 175); // gray pending
+        doc.text("En attente", 175, y + 5.5, { align: 'center' });
+      }
+
+      y += 10.5;
+    });
+
+    y += 4; // space between rounds
+  });
+
+  // Save the document
+  const fileName = `Tournoi_${tournament.name.replace(/\s+/g, '_')}.pdf`;
+  doc.save(fileName);
+};
+

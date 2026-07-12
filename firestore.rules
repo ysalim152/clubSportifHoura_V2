@@ -272,6 +272,25 @@ service cloud.firestore {
                       );
         allow delete: if isVerified() && (isClubAdmin(clubId) || (resource != null && resource.data.userId == request.auth.uid));
       }
+
+      // Sub-collection: Tournaments
+      match /tournaments/{tournamentId} {
+        allow read: if isVerified() && isMember(clubId);
+        allow create, delete: if isVerified() && isValidId(tournamentId) && isClubCoach(clubId) &&
+                               request.resource.data.clubId == clubId;
+        allow update: if isVerified() && isValidId(tournamentId) && (
+          (isClubCoach(clubId) && request.resource.data.clubId == clubId) ||
+          (isMember(clubId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['subscribers']))
+        );
+
+        // Sub-collection: Notifications
+        match /notifications/{notificationId} {
+          allow read: if isVerified() && isMember(clubId);
+          allow create: if isVerified() && isValidId(notificationId) && isClubCoach(clubId) &&
+                           request.resource.data.tournamentId == tournamentId;
+          allow update, delete: if isVerified() && isClubCoach(clubId);
+        }
+      }
     }
   }
 }

@@ -202,6 +202,41 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "clubId", "name", "category", "totalQuantity", "allocatedQuantity", "availableQuantity", "createdAt"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "A sports tournament managed within a club.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "name": { "type": "string" },
+        "date": { "type": "string" },
+        "category": { "type": "string" },
+        "format": { "type": "string", "enum": ["round_robin", "single_elimination"] },
+        "teams": { "type": "array" },
+        "status": { "type": "string", "enum": ["draft", "active", "completed"] },
+        "createdAt": { "type": "string" },
+        "subscribers": { "type": "array" },
+        "isArchived": { "type": "boolean" }
+      },
+      "required": ["id", "clubId", "name", "date", "category", "format", "teams", "status", "createdAt"]
+    },
+    "TournamentNotification": {
+      "title": "TournamentNotification",
+      "description": "A notification/activity log for a tournament match or schedule change.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tournamentId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["schedule_change", "match_result"] },
+        "matchId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["id", "tournamentId", "title", "message", "type", "createdAt", "createdBy"]
     }
   },
   "firestore": {
@@ -252,6 +287,14 @@
     "/clubs/{clubId}/feedbacks/{feedbackId}": {
       "schema": "Feedback",
       "description": "User suggestions, complaints, and bug reports sub-collection."
+    },
+    "/clubs/{clubId}/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Tournaments and championship structures."
+    },
+    "/clubs/{clubId}/tournaments/{tournamentId}/notifications/{notificationId}": {
+      "schema": "TournamentNotification",
+      "description": "Championship match notifications and logs."
     }
   }
 }
