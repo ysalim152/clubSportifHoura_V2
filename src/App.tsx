@@ -555,15 +555,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* Sidebar navigation */}
-      <aside className={`w-full bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-850 transition-all duration-300 ease-in-out relative z-30 ${
+      {/* Sidebar navigation (Desktop-only) */}
+      <aside className={`hidden md:flex flex-col justify-between shrink-0 bg-slate-900 text-slate-300 border-r border-slate-850 transition-all duration-300 ease-in-out relative z-30 ${
         isSidebarCollapsed ? 'md:w-20' : 'md:w-72'
-      } ${
-        isMobileMenuOpen ? 'block' : 'hidden md:flex'
       }`}>
         <div className={`p-6 space-y-8 ${isSidebarCollapsed ? 'md:p-3 md:space-y-6' : ''}`}>
           {/* Logo Brand */}
-          <div className="hidden md:flex items-center justify-between gap-2.5">
+          <div className="flex items-center justify-between gap-2.5">
             <div className="flex items-center gap-3 overflow-hidden">
               <img src="/favicon.svg" alt="App Logo" className="w-10 h-10 object-contain rounded-xl shadow-md shrink-0" referrerPolicy="no-referrer" id="club-logo-sidebar" />
               {!isSidebarCollapsed && (
@@ -577,7 +575,7 @@ export default function App() {
             {/* Collapse toggle button for desktop */}
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="hidden md:flex p-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-750 transition-colors cursor-pointer shrink-0"
+              className="flex p-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-750 transition-colors cursor-pointer shrink-0"
               title={isSidebarCollapsed ? "Développer le menu" : "Réduire le menu"}
             >
               {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -627,7 +625,6 @@ export default function App() {
                     setActiveTab(item.id);
                     setQuickAction(null);
                     window.scrollTo({ top: 0 });
-                    setIsMobileMenuOpen(false);
                   }}
                   className={`relative w-full flex items-center rounded-xl text-sm font-bold tracking-tight transition-all duration-200 cursor-pointer group z-10 ${
                     isSidebarCollapsed ? 'md:justify-center md:p-3' : 'px-4 py-3'
@@ -716,6 +713,141 @@ export default function App() {
           </button>
         </div>
       </aside>
+
+      {/* Mobile Sidebar Overlay (Slide-over drawer) with fluid Framer Motion */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <>
+            {/* Backdrop Blur overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 md:hidden"
+            />
+
+            {/* Slide-over Mobile Panel */}
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+              className="fixed inset-y-0 left-0 w-4/5 max-w-sm bg-slate-900 text-slate-300 flex flex-col justify-between z-50 md:hidden shadow-2xl border-r border-slate-800/80"
+            >
+              <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                {/* Drawer Header */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-800/80">
+                  <div className="flex items-center gap-2.5">
+                    <img src="/favicon.svg" alt="App Logo" className="w-10 h-10 object-contain rounded-xl shadow-md shrink-0" referrerPolicy="no-referrer" id="club-logo-mobile-drawer" />
+                    <div>
+                      <h2 className="font-black text-white text-md tracking-tight leading-none">HouraSports</h2>
+                      <span className="text-[9px] text-emerald-400 font-extrabold uppercase tracking-widest mt-1 block">SaaS de club</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                  >
+                    <X className="w-5.5 h-5.5" />
+                  </button>
+                </div>
+
+                {/* Club Context Info inside Mobile Menu */}
+                <div className="p-4 bg-slate-850 rounded-xl border border-slate-800/60 flex items-center gap-3 shadow-inner">
+                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center p-1 shrink-0 shadow-sm border border-slate-700">
+                    <img src="/club_logo.svg" alt="Club Crest" className="w-full h-full object-contain" referrerPolicy="no-referrer" id="club-logo-crest-mobile" />
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="font-bold text-white text-sm truncate leading-tight">{selectedClub.name}</p>
+                    <button 
+                      onClick={() => {
+                        setSelectedClub(null);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold transition flex items-center gap-0.5 mt-0.5 cursor-pointer"
+                    >
+                      <Compass className="w-3 h-3" /> Changer de club
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main Navigation links for Mobile */}
+                <nav className="space-y-1 relative">
+                  {filteredMenuItems.map(item => {
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setQuickAction(null);
+                          window.scrollTo({ top: 0 });
+                          setIsMobileMenuOpen(false);
+                        }}
+                        className={`relative w-full flex items-center rounded-xl text-sm font-bold tracking-tight transition-all duration-200 cursor-pointer px-4 py-3 group z-10 ${
+                          isActive 
+                            ? 'text-white font-extrabold' 
+                            : 'hover:bg-slate-850/40 text-slate-400 hover:text-slate-100'
+                        }`}
+                      >
+                        {isActive && (
+                          <motion.div
+                            layoutId="active-nav-pill-mobile"
+                            className="absolute inset-0 bg-emerald-600 rounded-xl -z-10 shadow-md shadow-emerald-950/30"
+                            transition={{ type: "spring", stiffness: 350, damping: 32 }}
+                          />
+                        )}
+
+                        <item.icon className={`w-5 h-5 shrink-0 transition-colors duration-200 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                        <span className="ml-3.5">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
+
+              {/* Bottom Drawer Footer (User Info & Settings) */}
+              <div className="p-6 border-t border-slate-800/80 bg-slate-900/50 backdrop-blur-sm space-y-4">
+                <button
+                  onClick={() => {
+                    setIsMfaSettingsOpen(true);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-800 hover:border-slate-750 hover:bg-slate-850/50 text-left transition cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="w-9 h-9 bg-slate-800 rounded-full border border-slate-700 flex items-center justify-center text-white font-bold text-xs uppercase shadow-inner shrink-0 group-hover:border-emerald-500 transition-colors">
+                      {currentUser.displayName ? currentUser.displayName[0] : currentUser.email ? currentUser.email[0] : '?'}
+                    </div>
+                    <div className="overflow-hidden">
+                      <p className="font-bold text-white text-xs truncate leading-none">
+                        {currentUser.displayName || currentUser.email?.split('@')[0]}
+                      </p>
+                      <span className="inline-flex items-center gap-1 text-[9px] text-slate-500 font-bold uppercase tracking-wider group-hover:text-emerald-400 transition-colors mt-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        MFA / Sécurité
+                      </span>
+                    </div>
+                  </div>
+                  <Settings2 className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors shrink-0 ml-1" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 border border-slate-800 hover:border-slate-750 bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white font-semibold py-2.5 px-4 rounded-xl text-xs transition-all duration-200 cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Se déconnecter</span>
+                </button>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0">
