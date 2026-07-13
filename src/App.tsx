@@ -50,8 +50,24 @@ export default function App() {
   // Tab states: 'dashboard' | 'membres' | 'calendrier' | 'finances' | 'messagerie'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [quickAction, setQuickAction] = useState<string | null>(null);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth < 1024 : false;
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Automatically collapse sidebar on tablet screens (< 1024px)
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768 && window.innerWidth < 1024) {
+        setIsSidebarCollapsed(true);
+      } else if (window.innerWidth >= 1024) {
+        setIsSidebarCollapsed(false);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Firestore collections states
   const [members, setMembers] = useState<Member[]>([]);
@@ -364,9 +380,7 @@ export default function App() {
         {/* Header */}
         <header className="px-6 py-4 bg-white border-b border-slate-200 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white shadow-md">
-              <Activity className="w-6 h-6" />
-            </div>
+            <img src="/club_logo.svg" alt="Club Logo" className="w-10 h-10 object-contain" referrerPolicy="no-referrer" id="club-logo-header" />
             <div>
               <h1 className="font-bold text-xl tracking-tight text-slate-900">HouraSports</h1>
               <p className="text-xs text-slate-500 font-medium">SaaS de gestion de club</p>
@@ -522,9 +536,7 @@ export default function App() {
       {/* Mobile Top Navigation Header */}
       <div className="md:hidden bg-slate-900 text-slate-300 p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-md">
-            <Activity className="w-5.5 h-5.5" />
-          </div>
+          <img src="/favicon.svg" alt="App Logo" className="w-9 h-9 object-contain rounded-xl shadow-md shrink-0" referrerPolicy="no-referrer" id="club-logo-mobile" />
           <div>
             <h2 className="font-black text-white text-sm tracking-tight leading-none">HouraSports</h2>
             <span className="text-[8px] text-emerald-400 font-extrabold uppercase tracking-widest mt-0.5 block">SaaS de club</span>
@@ -551,11 +563,9 @@ export default function App() {
       }`}>
         <div className={`p-6 space-y-8 ${isSidebarCollapsed ? 'md:p-3 md:space-y-6' : ''}`}>
           {/* Logo Brand */}
-          <div className="flex items-center justify-between gap-2.5">
+          <div className="hidden md:flex items-center justify-between gap-2.5">
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-md shrink-0">
-                <Activity className="w-6 h-6 animate-pulse" />
-              </div>
+              <img src="/favicon.svg" alt="App Logo" className="w-10 h-10 object-contain rounded-xl shadow-md shrink-0" referrerPolicy="no-referrer" id="club-logo-sidebar" />
               {!isSidebarCollapsed && (
                 <div className="transition-all duration-300 opacity-100 animate-fadeIn">
                   <h2 className="font-black text-white text-lg tracking-tight">HouraSports</h2>
@@ -578,8 +588,8 @@ export default function App() {
           <div className={`relative p-4 bg-slate-850 rounded-xl border border-slate-800 flex items-center gap-3 transition-all group/club ${
             isSidebarCollapsed ? 'md:p-2 md:justify-center' : ''
           }`}>
-            <div className="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-bold text-sm uppercase shrink-0">
-              {selectedClub.name.substring(0, 2)}
+            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center p-1 shrink-0 shadow-sm border border-slate-700">
+              <img src="/club_logo.svg" alt="Club Crest" className="w-full h-full object-contain" referrerPolicy="no-referrer" id="club-logo-crest" />
             </div>
             {!isSidebarCollapsed && (
               <div className="overflow-hidden animate-fadeIn">

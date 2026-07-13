@@ -266,9 +266,7 @@ export default function ClubManager({ onSelectClub, onLogout }: ClubManagerProps
     <div id="club-manager" className="min-h-screen bg-slate-50 flex flex-col justify-between font-sans">
       <header className="px-6 py-4 bg-white border-b border-slate-200 flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white shadow-md">
-            <Activity className="w-6 h-6" />
-          </div>
+          <img src="/club_logo.svg" alt="Club Logo" className="w-10 h-10 object-contain" referrerPolicy="no-referrer" id="club-logo-selector" />
           <div>
             <h1 className="font-bold text-xl tracking-tight text-slate-900">HouraSports</h1>
             <p className="text-xs text-slate-500 font-medium">Sélection de club</p>

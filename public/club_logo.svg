@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <!-- Dual Blue Outlines Shield Crest -->
+  <g stroke="#0f4c9c" fill="none" stroke-linejoin="round">
+    <!-- Outer Shield border -->
+    <path d="M 250,25 C 365,25 415,70 435,115 C 435,295 365,395 250,475 C 135,395 65,295 65,115 C 85,70 135,25 250,25 Z" stroke-width="8" fill="#ffffff" />
+    <!-- Inner Shield border -->
+    <path d="M 250,38 C 350,38 398,78 417,118 C 417,282 350,378 250,453 C 150,378 83,282 83,118 C 102,78 150,38 250,38 Z" stroke-width="3" />
+  </g>
+
+  <!-- Big Bold 'ASH' athletic text -->
+  <text x="250" y="210" font-family="'Impact', 'Arial Black', sans-serif" font-weight="900" font-size="115" fill="#0f4c9c" text-anchor="middle" letter-spacing="-3">ASH</text>
+
+  <!-- Horizontal Divider Line below ASH -->
+  <line x1="90" y1="230" x2="410" y2="230" stroke="#0f4c9c" stroke-width="4.5" />
+
+  <!-- Subtitle 'ASSOCIATION SPORTIVE HOURA' -->
+  <text x="250" y="255" font-family="'Arial', 'Helvetica', sans-serif" font-weight="900" font-size="17" fill="#0f4c9c" text-anchor="middle" letter-spacing="1.5">ASSOCIATION SPORTIVE HOURA</text>
+
+  <!-- Main word 'HOURA' inside horizontal lines -->
+  <g>
+    <!-- Left line -->
+    <line x1="92" y1="277" x2="190" y2="277" stroke="#0f4c9c" stroke-width="3.5" />
+    <!-- Text -->
+    <text x="250" y="289" font-family="'Arial Black', 'Impact', sans-serif" font-weight="900" font-size="34" fill="#0f4c9c" text-anchor="middle" letter-spacing="4">HOURA</text>
+    <!-- Right line -->
+    <line x1="310" y1="277" x2="408" y2="277" stroke="#0f4c9c" stroke-width="3.5" />
+  </g>
+
+  <!-- 'EST. 1990' text -->
+  <text x="250" y="318" font-family="'Arial', 'Helvetica', sans-serif" font-weight="bold" font-size="16" fill="#0f4c9c" text-anchor="middle" letter-spacing="1.2">EST. 1990</text>
+
+  <!-- Classic Soccer Ball at the Bottom -->
+  <g transform="translate(0, 5)">
+    <!-- Ball boundary -->
+    <circle cx="250" cy="385" r="44" fill="#ffffff" stroke="#0f4c9c" stroke-width="4.5" />
+    
+    <!-- Central Pentagon -->
+    <polygon points="250,370 264,380 259,396 241,396 236,380" fill="#0f4c9c" stroke="#0f4c9c" stroke-width="2" />
+    
+    <!-- Lines radiating outwards from Pentagon vertices to outer circle -->
+    <line x1="250" y1="370" x2="250" y2="341" stroke="#0f4c9c" stroke-width="3.5" />
+    <line x1="264" y1="380" x2="291" y2="366" stroke="#0f4c9c" stroke-width="3.5" />
+    <line x1="259" y1="396" x2="277" y2="421" stroke="#0f4c9c" stroke-width="3.5" />
+    <line x1="241" y1="396" x2="223" y2="421" stroke="#0f4c9c" stroke-width="3.5" />
+    <line x1="236" y1="380" x2="209" y2="366" stroke="#0f4c9c" stroke-width="3.5" />
+    
+    <!-- Surrounding hexagon lines -->
+    <path d="M 250,341 L 273,348 L 291,366 L 292,395 L 277,421 L 250,429 L 223,421 L 208,395 L 209,366 L 227,348 Z" stroke="#0f4c9c" stroke-width="3.5" fill="none" />
+    <line x1="273" y1="348" x2="284" y2="343" stroke="#0f4c9c" stroke-width="3" />
+    <line x1="227" y1="348" x2="216" y2="343" stroke="#0f4c9c" stroke-width="3" />
+    <line x1="292" y1="395" x2="294" y2="400" stroke="#0f4c9c" stroke-width="3" />
+    <line x1="208" y1="395" x2="206" y2="400" stroke="#0f4c9c" stroke-width="3" />
+  </g>
+
+  <!-- Laurel Leaf Wreath branches on Left and Right -->
+  <g fill="#0f4c9c" stroke="none">
+    <!-- Left Laurel Branch leaves -->
+    <path d="M 190,410 C 180,418 165,420 155,410 C 158,400 172,398 182,402 Z" />
+    <path d="M 172,385 C 160,392 145,392 138,380 C 143,370 156,372 166,378 Z" />
+    <path d="M 158,358 C 145,362 130,360 126,346 C 132,338 145,342 153,350 Z" />
+    <path d="M 148,328 C 135,330 122,325 120,311 C 128,304 139,311 145,320 Z" />
+    <path d="M 143,298 C 131,298 120,290 121,276 C 130,272 139,281 142,290 Z" />
+    <!-- Left Branch Stem -->
+    <path d="M 195,412 C 160,400 140,350 140,285 C 140,282 142,282 142,285 C 142,348 161,396 193,408 Z" />
+
+    <!-- Right Laurel Branch leaves -->
+    <path d="M 310,410 C 320,418 335,420 345,410 C 342,400 328,398 318,402 Z" />
+    <path d="M 328,385 C 340,392 355,392 362,380 C 357,370 344,372 334,378 Z" />
+    <path d="M 342,358 C 355,362 370,360 374,346 C 368,338 355,342 347,350 Z" />
+    <path d="M 352,328 C 365,330 378,325 380,311 C 372,304 361,311 355,320 Z" />
+    <path d="M 357,298 C 369,298 380,290 379,276 C 370,272 361,281 358,290 Z" />
+    <!-- Right Branch Stem -->
+    <path d="M 305,412 C 340,400 360,350 360,285 C 360,282 358,282 358,285 C 358,348 339,396 307,408 Z" />
+  </g>
+
+  <!-- Dynamic Star with Running Athlete at the Top Right -->
+  <g transform="translate(420, 80)">
+    <!-- 5-Point Star in deep blue -->
+    <polygon points="0,-32 9,-10 32,-9 14,7 20,30 0,16 -20,30 -14,7 -32,-9 -9,-10" fill="#0f4c9c" />
+    <!-- Runner Silhouette in white cut-out -->
+    <!-- Head -->
+    <circle cx="2" cy="-12" r="4.5" fill="#ffffff" />
+    <!-- Torso -->
+    <path d="M 1,-6 L 3,4 L -2,12" stroke="#ffffff" stroke-width="4" stroke-linecap="round" fill="none" />
+    <!-- Arms -->
+    <path d="M 1,-6 L 8,-3 L 13,-9" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none" />
+    <path d="M 1,-6 L -5,-9 L -11,-4" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none" />
+    <!-- Legs -->
+    <path d="M 3,4 L 10,13 L 16,11" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none" />
+    <path d="M 3,4 L -5,9 L -7,16" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none" />
+  </g>
+</svg>

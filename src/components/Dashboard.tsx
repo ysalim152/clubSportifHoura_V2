@@ -178,7 +178,7 @@ export default function Dashboard({
       </div>
 
       {/* Main Grid: Charts & Next Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {/* Quick Actions */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
           <div className="space-y-4">
@@ -277,7 +277,7 @@ export default function Dashboard({
         </div>
 
         {/* Member distribution */}
-        <div id="member-distribution-card" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+        <div id="member-distribution-card" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between md:col-span-2 lg:col-span-1">
           <div>
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-slate-900 text-lg">Effectifs</h3>
